@@ -19,8 +19,9 @@ import matplotlib.pyplot as plt
 import imageio
 import sys
 import os
+import errno
 
-from matplotlib.patches import Ellipse
+from matplotlib.patches import Ellipse, Circle
 from cvxopt import matrix, solvers, spdiag
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) +
@@ -75,6 +76,25 @@ class State(object):
         self.yaw += self.v / L * np.tan(delta) * dt
         self.yaw = normalize_angle(self.yaw)
         self.v += acceleration * dt
+    
+    def update_by_vel(self, v_, delta):
+        """
+        Update the state of the vehicle. But
+        instead of using an acceleration based
+        control, use direct velocity control.
+
+        Stanley Control uses bicycle model.
+
+        :param acceleration: (float) Acceleration
+        :param delta: (float) Steering
+        """
+        delta = np.clip(delta, -max_steer, max_steer)
+
+        self.x += self.v * np.cos(self.yaw) * dt
+        self.y += self.v * np.sin(self.yaw) * dt
+        self.yaw += self.v / L * np.tan(delta) * dt
+        self.yaw = normalize_angle(self.yaw)
+        self.v = v_
 
 
 def pid_control(target, current):
@@ -168,8 +188,8 @@ def CBF(s, u_des, cx, cy, a, b, gamma):
         Df = matrix(0.0, (m+1, n))
         f[0] = (x - u_des).T * (x - u_des)
         # temp vars are written as tn
-        t1 = matrix([2*(s[0] - cx)/a, 2*(s[1] - cy)/b, 0], (1,3))
-        t2 = matrix([ [np.cos(s[2]), np.sin(2), 0], [0, 0, 1] ])
+        t1 = matrix([2*(s[0] - cx)/(a**2), 2*(s[1] - cy)/(b**2), 0], (1,3))
+        t2 = matrix([ [np.cos(s[2]), np.sin(s[2]), 0], [0, 0, 1] ])
         t3 = gamma * ( ((s[0] - cx)/a)**2 + ((s[1] - cy)/b)**2 - 1 )
 
         f[1] = -(t1 * t2 * x + t3)
@@ -182,6 +202,42 @@ def CBF(s, u_des, cx, cy, a, b, gamma):
         return f, Df, H
     return solvers.cp(F)['x']
 
+def D_CBF(s, u_des, cx, cy, Ds, gamma):
+    m = 1 # No. of Constraints
+    n = 2 # Dimension of x0 i.e. u
+    u_des = matrix(u_des)
+    def F(x=None, z=None):
+        # if x is None: return m, matrix(0.0, (n, 1))
+        if x is None: return m, u_des    
+        # for 1 objective function and 1 constraint and 3 state vars
+        f = matrix(0.0, (m+1, 1))
+        Df = matrix(0.0, (m+1, n))
+        f[0] = (x - u_des).T * (x - u_des)
+        # CBFs
+        # Distance based CBF and its derivatives
+        h1 = np.sqrt((s[0] - cx)**2 + (s[1] - cy)**2) - Ds
+        h1_dx = 2 * (s[0] - cx)/(h1 + Ds)
+        h1_dy = 2 * (s[1] - cy)/(h1 + Ds)
+        # h1_dxx = 2 * ( (h1 + Ds) - (s[0] - cx) * h1_dx )/( (h1 + Ds)**2 )
+        # h1_dxy = -2 * (s[0] - cx) * (s[1] - cy)/( (h1 + Ds)**3 )
+        # h1_dyx = h1_dxy
+        # h1_dyy = 2 * ( (h1 + Ds) - (s[1] - cy) * h1_dy )/( (h1 + Ds)**2 )
+
+        # temp vars are written as tn or tnm or tnf where f is the func it
+        # corresponds to
+        t11 = matrix([h1_dx, h1_dy, 0], (1,3))
+        t12 = matrix([ [np.cos(s[2]), np.sin(2), 0], [0, 0, 1] ])
+        t13 = -gamma * h1
+
+        f[1] = -(t11 * t12 * x + t13)
+
+        Df[0, :] = 2 * (x - u_des).T
+        Df[1, :] = -1 * (t11 * t12)
+
+        if z is None: return f, Df
+        H = z[0] * 2 * matrix(np.eye(n))
+        return f, Df, H
+    return solvers.cp(F)['x']
 
 def main():
     """Plot an example of Stanley steering control on a cubic spline."""
@@ -211,37 +267,57 @@ def main():
     # Elliptical Obstacle on Track
     a = 20
     b = 10
-    obs_idx = int(last_idx*0.75) # Obstacle on 75% of the trajectory
+    obs_idx = int(last_idx*0.50) # Obstacle on 75% of the trajectory
     o_cx = cx[obs_idx]
     o_cy = cy[obs_idx]
 
+    # FLAGS and IMP. CONSTANTS
     USE_CBF = True
     ZERO_TOL = 1e-3
+    CBF_TYPE = 1 # 0: Ellipse, 1: Distance
     # params for animation
     i = 0
     fnames = []
+    delta_stanley = np.zeros(int(max_simulation_time/dt) + 1)
+    delta_cbf = np.zeros_like(delta_stanley)
     while max_simulation_time >= time and last_idx > target_idx:
         # We will assume that the velocity control based CBF is modifying the
         # target velocity.
         v_ = target_speed
         ai = pid_control(target_speed, state.v)
         di, target_idx = stanley_control(state, cx, cy, cyaw, target_idx)
+        delta_stanley[i] = di
 
         # Implementing the CBF
         if USE_CBF:
-            u_des = np.array([v_, v_ * np.tan(state.yaw)/L])
+            u_des = np.array([v_, v_ * np.tan(di)/L])
             gamma = 3.0
             s = np.array([ state.x, state.y, state.yaw ])
-            u = CBF(s, u_des, o_cx, o_cy, a, b, gamma)
-            v_cbf = u[0]
-            w_cbf = u[1]
-            # di_cbf = np.arctan(w_cbf * L / v_cbf)
-            di_cbf = di
+            Dbuffer = 1
+            Ds = max(a, b)/2 + Dbuffer
+            if CBF_TYPE == 0:
+                u = CBF(s, u_des, o_cx, o_cy, a, b, gamma)
+                v_cbf = u[0]
+                w_cbf = u[1]
+                di_cbf = np.arctan(w_cbf * L / v_cbf)
+                delta_cbf[i] = di_cbf
+            if CBF_TYPE == 1:
+                u = D_CBF(s, u_des, o_cx, o_cy, Ds, gamma)
+                v_cbf = u[0]
+                w_cbf = u[1]
+                di_cbf = np.arctan(w_cbf * L / v_cbf)
+                delta_cbf[i] = di_cbf
+            # di_cbf = di
             print("v: ", v_cbf, " delta: ", di_cbf)
             print("old v: ", v_, " old delta: ", di)
             print("time: ", time)
+
             ai_cbf = pid_control(v_cbf, state.v)
-            state.update(ai_cbf, di_cbf)
+
+            ## TO USE VELOCITY CONTROL, USE THE
+            ## update_by_vel FUNCTION, NOT update.
+            # state.update(ai_cbf, di_cbf)
+            state.update_by_vel(v_cbf, di_cbf)
         else:
             state.update(ai, di)
 
@@ -252,6 +328,14 @@ def main():
         yaw.append(state.yaw)
         v.append(state.v)
         t.append(time)
+
+        # Creating the temp directory to store temporary data
+        try:
+            if not os.path.exists('temp'):
+                os.makedirs('temp')
+        except OSError as e:
+            if e.errno != errno.EEXIST:
+                raise
         
         if show_animation:  # pragma: no cover
             plt.cla()
@@ -281,6 +365,11 @@ def main():
             else:
                 plt.text(75, 30, "Planner V[m/s]: 0")
             
+            if USE_CBF and (CBF_TYPE == 0):
+                plt.text(75, 25, "CBF Type: Ellipse")
+            if USE_CBF and (CBF_TYPE == 1):
+                plt.text(75, 25, "CBF Type: Distance")
+
             if abs(v_cbf - target_speed) < ZERO_TOL:
                 cbf_active = False
                 plt.text(0, 25, "CBF Status: Dormant")
@@ -290,17 +379,22 @@ def main():
             plt.text(0, 20, "Gamma: " + str(gamma)[:4])            
 
             ax = plt.gca()
-            obs_ellipse = Ellipse(xy=(o_cx, o_cy), width=a, height=b, ec='b', fc='g', lw=2)
+            obs_ellipse = Ellipse(xy=(o_cx, o_cy), width=a, height=b, ec='b', fc=(0,1,0,0.5), lw=2, ls='-.')
+            obs_dist_circle = Circle(xy=(o_cx, o_cy), radius=Ds, ls='--', lw=2, ec='k', fc=(0,1,0,0))
             ax.add_patch(obs_ellipse)
-
+            ax.add_patch(obs_dist_circle)
             # im = plt.imshow(animated=True)
             # ims.append([im])
             plt.pause(0.001)
-            fname = os.getcwd() + "/temp/ts1_{0}.png".format(i)
+            fname = os.getcwd() + "\\temp\\ts1_{0}.png".format(i)
             i = i + 1
             fnames.append(fname)
             plt.savefig(fname)
         
+    delta_diff = delta_cbf - delta_stanley
+    # zero padding
+    if delta_diff.size < len(t):
+        delta_diff = np.append(delta_diff, np.zeros(len(t) - delta_diff.shape[0]))
 
     # Test
     assert last_idx >= target_idx, "Cannot reach goal"
@@ -317,6 +411,7 @@ def main():
         os.remove(filename)
 
     if show_animation:  # pragma: no cover
+        plt.figure(2)
         plt.plot(cx, cy, ".r", label="course")
         plt.plot(x, y, "-b", label="trajectory")
         plt.legend()
@@ -330,8 +425,13 @@ def main():
         plt.xlabel("Time[s]")
         plt.ylabel("Speed[km/h]")
         plt.grid(True)
-        plt.show()
 
+        plt.figure(4)
+        plt.plot(t, delta_diff, "-g")
+        plt.xlabel("Time[s]")
+        plt.ylabel("CBF Modification in delta[rad]")
+        plt.grid(True)
+        plt.show()
 
 if __name__ == '__main__':
     main()
