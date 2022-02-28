@@ -22,7 +22,7 @@ import os
 import errno
 
 from matplotlib.patches import Ellipse, Circle
-from cvxopt import matrix, solvers, spdiag
+from cvxopt import matrix, solvers, spdiag, sqrt
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) +
                 "/PathPlanning/CubicSpline/")
@@ -215,7 +215,7 @@ def D_CBF(s, u_des, cx, cy, Ds, gamma):
         f[0] = (x - u_des).T * (x - u_des)
         # CBFs
         # Distance based CBF and its derivatives
-        h1 = np.sqrt((s[0] - cx)**2 + (s[1] - cy)**2) - Ds
+        h1 = sqrt((s[0] - cx)**2 + (s[1] - cy)**2) - Ds
         h1_dx = 2 * (s[0] - cx)/(h1 + Ds)
         h1_dy = 2 * (s[1] - cy)/(h1 + Ds)
         # h1_dxx = 2 * ( (h1 + Ds) - (s[0] - cx) * h1_dx )/( (h1 + Ds)**2 )
@@ -226,7 +226,7 @@ def D_CBF(s, u_des, cx, cy, Ds, gamma):
         # temp vars are written as tn or tnm or tnf where f is the func it
         # corresponds to
         t11 = matrix([h1_dx, h1_dy, 0], (1,3))
-        t12 = matrix([ [np.cos(s[2]), np.sin(2), 0], [0, 0, 1] ])
+        t12 = matrix([ [np.cos(s[2]), np.sin(s[2]), 0], [0, 0, 1] ])
         t13 = -gamma * h1
 
         f[1] = -(t11 * t12 * x + t13)
@@ -238,6 +238,55 @@ def D_CBF(s, u_des, cx, cy, Ds, gamma):
         H = z[0] * 2 * matrix(np.eye(n))
         return f, Df, H
     return solvers.cp(F)['x']
+
+def CBF_A(s, u_des, cx, cy, a, b, gamma):
+    m = 1 # No. of Constraints
+    n = 2 # Dimension of x0 i.e. u
+    u_des = matrix(u_des)
+
+    def F(x=None, z=None):
+        if x is None: return m, matrix(0.0, (n, 1))
+        # if x is None: return m, u_des    
+        # for 1 objective function and 1 constraint and 3 state vars
+        f = matrix(0.0, (m+1, 1))
+        Df = matrix(0.0, (m+1, n))
+        f[0] = (x - u_des).T * (x - u_des)
+        # CBFs
+        h1 = ((s[0] - cx)/a)**2 + ((s[1] - cy)/b)**2 - 1
+        h1_dx = 2*(s[0] - cx)/(a**2)
+        h1_dy = 2*(s[1] - cy)/(b**2)
+        # temp vars are written as tn
+        Dh1 = matrix([h1_dx, h1_dy, 0, 0], (1, 4))
+        f_c = matrix([ s[3] * np.cos(s[2]), s[3] * np.sin(s[2]), 0, 0], (4, 1))
+        g_c = matrix([ [0, 0, 0, 1], [0, 0, 1, 0] ])
+
+        f[1] = -(Dh1 * (f_c + g_c * x) + gamma * h1)
+
+        Df[0, :] = 2 * (x - u_des).T
+        Df[1, :] = -1 * (Dh1 * g_c)
+
+        if z is None: return f, Df
+        H = z[0] * 2 * matrix(np.eye(n))
+        return f, Df, H
+
+    # Enforcing linear constraints on control i/p
+    a_max = 2.23 # m/s^2
+    a_min = 0
+
+    G = matrix([ [-1, 1],
+                 [ 0, 0] ])
+    h = matrix([ -a_min, a_max ])
+
+    return solvers.cp(F, G=G, h=h)['x']
+    # return solvers.cp(F)['x']
+
+def saturation(x, x_min, x_max):
+    if x >= x_max:
+        return x_max
+    elif x <= x_min:
+        return x_min
+    else:
+        return x
 
 def main():
     """Plot an example of Stanley steering control on a cubic spline."""
@@ -274,7 +323,9 @@ def main():
     # FLAGS and IMP. CONSTANTS
     USE_CBF = True
     ZERO_TOL = 1e-3
-    CBF_TYPE = 1 # 0: Ellipse, 1: Distance
+    CBF_TYPE = 2 # 0: Ellipse, 1: Distance, 2: Ellipse - Acceleration Controlled
+    a_max = 2.29 # m/s^2
+    a_min = -2.29
     # params for animation
     i = 0
     fnames = []
@@ -290,34 +341,50 @@ def main():
 
         # Implementing the CBF
         if USE_CBF:
-            u_des = np.array([v_, v_ * np.tan(di)/L])
-            gamma = 3.0
-            s = np.array([ state.x, state.y, state.yaw ])
+            gamma = 0.1
+            
             Dbuffer = 1
             Ds = max(a, b)/2 + Dbuffer
             if CBF_TYPE == 0:
+                u_des = np.array([v_, v_ * np.tan(di)/L])
+                s = np.array([ state.x, state.y, state.yaw ])
                 u = CBF(s, u_des, o_cx, o_cy, a, b, gamma)
                 v_cbf = u[0]
                 w_cbf = u[1]
                 di_cbf = np.arctan(w_cbf * L / v_cbf)
                 delta_cbf[i] = di_cbf
+                state.update_by_vel(v_cbf, di_cbf)
+                print("v: ", v_cbf, " delta: ", di_cbf)
+                print("old v: ", v_, " old delta: ", di)
+
             if CBF_TYPE == 1:
+                u_des = np.array([v_, v_ * np.tan(di)/L])
+                s = np.array([ state.x, state.y, state.yaw ])
                 u = D_CBF(s, u_des, o_cx, o_cy, Ds, gamma)
                 v_cbf = u[0]
                 w_cbf = u[1]
                 di_cbf = np.arctan(w_cbf * L / v_cbf)
                 delta_cbf[i] = di_cbf
-            # di_cbf = di
-            print("v: ", v_cbf, " delta: ", di_cbf)
-            print("old v: ", v_, " old delta: ", di)
+                state.update_by_vel(v_cbf, di_cbf)
+                print("v: ", v_cbf, " delta: ", di_cbf)
+                print("old v: ", v_, " old delta: ", di)
+
+            if CBF_TYPE == 2:
+                a_ = pid_control(target_speed, state.v)
+                u_des = np.array([a_, v_ * np.tan(di)/L])
+                s = np.array([ state.x, state.y, state.yaw, state.v ])
+                u = CBF(s, u_des, o_cx, o_cy, a, b, gamma)
+                # a_cbf = saturation(u[0], a_min, a_max)
+                a_cbf = u[0]
+                w_cbf = u[1]
+                di_cbf = np.arctan(w_cbf * L / v_)
+                delta_cbf[i] = di_cbf
+                state.update(a_cbf, di_cbf)
+                print(" a: ", a_cbf, " delta: ", di_cbf)
+                print(" v: ", v_, " old a: ", a_, " old delta: ", di)
+            
             print("time: ", time)
-
-            ai_cbf = pid_control(v_cbf, state.v)
-
-            ## TO USE VELOCITY CONTROL, USE THE
-            ## update_by_vel FUNCTION, NOT update.
-            # state.update(ai_cbf, di_cbf)
-            state.update_by_vel(v_cbf, di_cbf)
+            
         else:
             state.update(ai, di)
 
@@ -350,32 +417,56 @@ def main():
             plt.xlabel("x[m]")
             plt.ylabel("y[m]")
             plt.legend(loc='lower left')
+
             if(abs(state.v) > ZERO_TOL):
                 plt.title("Speed[m/s]:" + str(state.v)[:4])
             else:
                 plt.title("Speed[m/s]: 0")
-            
-            if(abs(v_cbf) > ZERO_TOL):
-                plt.text(0, 30, "CBF V[m/s]:" + str(v_cbf)[:4])
-            else:
-                plt.text(0, 30, "CBF V[m/s]: 0")
-            
-            if(abs(target_speed) > ZERO_TOL):
-                plt.text(75, 30, "Planner V[m/s]:" + str(target_speed)[:4])
-            else:
-                plt.text(75, 30, "Planner V[m/s]: 0")
-            
-            if USE_CBF and (CBF_TYPE == 0):
-                plt.text(75, 25, "CBF Type: Ellipse")
-            if USE_CBF and (CBF_TYPE == 1):
-                plt.text(75, 25, "CBF Type: Distance")
+                        
+            if CBF_TYPE == 1 or CBF_TYPE == 0:
+                if(abs(v_cbf) > ZERO_TOL):
+                    plt.text(0, 30, "CBF V[m/s]:" + str(v_cbf)[:4])
+                else:
+                    plt.text(0, 30, "CBF V[m/s]: 0")
+                
+                if(abs(target_speed) > ZERO_TOL):
+                    plt.text(75, 30, "Planner V[m/s]:" + str(target_speed)[:4])
+                else:
+                    plt.text(75, 30, "Planner V[m/s]: 0")
+                
+                if USE_CBF and (CBF_TYPE == 0):
+                    plt.text(75, 25, "CBF Type: Ellipse")
+                if USE_CBF and (CBF_TYPE == 1):
+                    plt.text(75, 25, "CBF Type: Distance")
 
-            if abs(v_cbf - target_speed) < ZERO_TOL:
-                cbf_active = False
-                plt.text(0, 25, "CBF Status: Dormant")
-            else:
-                cbf_active = True
-                plt.text(0, 25, "CBF Status: Triggered")
+                if abs(v_cbf - target_speed) < ZERO_TOL:
+                    cbf_active = False
+                    plt.text(0, 25, "CBF Status: Dormant")
+                else:
+                    cbf_active = True
+                    plt.text(0, 25, "CBF Status: Triggered")
+
+            if CBF_TYPE == 2:
+                if(abs(a_cbf) > ZERO_TOL):
+                    plt.text(0, 30, "CBF a[m/s]:" + str(a_cbf)[:4])
+                else:
+                    plt.text(0, 30, "CBF a[m/s]: 0")
+                
+                if(abs(a_) > ZERO_TOL):
+                    plt.text(75, 30, "PID a[m/s]:" + str(a_)[:4])
+                else:
+                    plt.text(75, 30, "PID a[m/s]: 0")
+
+                if USE_CBF:
+                    plt.text(75, 25, "CBF Type: Ellipse|A")
+
+                if abs(a_cbf - a_) < ZERO_TOL:
+                    cbf_active = False
+                    plt.text(0, 25, "CBF Status: Dormant")
+                else:
+                    cbf_active = True
+                    plt.text(0, 25, "CBF Status: Triggered")
+
             plt.text(0, 20, "Gamma: " + str(gamma)[:4])            
 
             ax = plt.gca()
@@ -426,12 +517,13 @@ def main():
         plt.ylabel("Speed[km/h]")
         plt.grid(True)
 
-        plt.figure(4)
-        plt.plot(t, delta_diff, "-g")
-        plt.xlabel("Time[s]")
-        plt.ylabel("CBF Modification in delta[rad]")
-        plt.grid(True)
-        plt.show()
+        if CBF_TYPE == 0 or CBF_TYPE == 1:
+            plt.figure(4)
+            plt.plot(t, delta_diff, "-g")
+            plt.xlabel("Time[s]")
+            plt.ylabel("CBF Modification in delta[rad]")
+            plt.grid(True)
+            plt.show()
 
 if __name__ == '__main__':
     main()
