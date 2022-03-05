@@ -9,9 +9,6 @@ __pycache__/
 # C extensions
 *.so
 
-# Jupyter Notebooks
-.ipynb
-
 # Distribution / packaging
 .Python
 build/
@@ -82,7 +79,7 @@ target/
 
 # Jupyter Notebook
 .ipynb_checkpoints
-.ipynb
+*.ipynb
 
 # IPython
 profile_default/
