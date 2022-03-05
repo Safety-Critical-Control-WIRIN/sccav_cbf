@@ -11,11 +11,20 @@ author: Neelaksh Singh
 
 import numpy as np
 from euclid import *
-# import carla
+from cvxopt import matrix
 
 import warnings
 from collections.abc import MutableMapping
-from cvxopt import matrix
+import sys
+import os
+
+sys.path.append(os.path.dirname(os.path.abspath(__file__)) +
+                "../")
+
+try:
+    from geometry import Rotation
+except:
+    raise
 
 # Identity Objects
 DICT_EMPTY_UPDATE = ()
@@ -189,7 +198,7 @@ class Ellipse2D(Obstacle2DBase):
         return super().dtheta(p)
 
     def __repr__(self):
-        return f"{type(self).__name__}(a = {self.a}, b = {self.b}, center = {self.center}, theta = {self.theta}, buffer = {self.buffer}, buffer applied: {self.BUFFER_FLAG} )\n"
+        return f"{type(self).__name__}(a = {self.a}, b = {self.b}, center = {self.center}, theta = {self.theta}, buffer = {self.buffer}, buffer_applied: {self.BUFFER_FLAG} )\n"
     
     @classmethod
     def fromBoundingBox(cls, BBox, buffer = 0.5):
@@ -291,3 +300,9 @@ class ObstacleList2D(MutableMapping):
             df[idx,:] = obs.gradient(p).T
             idx = idx + 1
         return df
+
+class BoundingBox():
+    def __init__(self, extent=Vector3(), location=Vector3(), rotation=Rotation()):
+        self.extent = extent
+        self.location = location
+        self.rotation = rotation
