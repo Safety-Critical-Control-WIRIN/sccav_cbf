@@ -22,7 +22,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)) +
                 "../")
 
 try:
-    from geometry import Rotation
+    from cbf.geometry import Rotation, Transform
 except:
     raise
 
@@ -306,3 +306,27 @@ class BoundingBox():
         self.extent = extent
         self.location = location
         self.rotation = rotation
+
+    def __eq__(self, other):
+        return self.location == other.location and self.extent == other.extent
+    
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def get_local_vertices(self):
+        up = self.rotation.get_up_vector().normalized()
+        right = self.rotation.get_right_vector().normalized()
+        forward = self.rotation.get_forward_vector().normalized()
+        v1 = -self.extent.z*up + self.extent.x*forward + self.extent.y*right
+        v2 = -self.extent.z*up + self.extent.x*forward - self.extent.y*right
+        v3 = -self.extent.z*up - self.extent.x*forward - self.extent.y*right
+        v4 = -self.extent.z*up - self.extent.x*forward + self.extent.y*right
+        v5 = self.extent.z*up + self.extent.x*forward + self.extent.y*right
+        v6 = self.extent.z*up + self.extent.x*forward - self.extent.y*right
+        v7 = self.extent.z*up - self.extent.x*forward - self.extent.y*right
+        v8 = self.extent.z*up - self.extent.x*forward + self.extent.y*right
+        return [v1, v2, v3, v4, v5, v6, v7, v8]
+
+    def get_world_vertices(self, transform=Transform):
+        v_list = self.get_local_vertices()
+        return [transform.transform(v) for v in v_list]
