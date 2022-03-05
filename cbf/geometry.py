@@ -8,9 +8,7 @@ author: Neelaksh Singh
 
 """
 
-from turtle import forward
 from euclid import *
-from sympy import Point3D
 
 class Rotation():
     """
@@ -37,7 +35,7 @@ class Rotation():
         # Bank     => Roll
         # All euclid quaternion functions expect the sequence 
         # H, A, B => Y, P, R
-        self._quaternion = Quaternion.new_rotate_euler(yaw, pitch, roll)
+        self.__quaternion = Quaternion.new_rotate_euler(yaw, pitch, roll)
 
     def __eq__(self, other):
         if self.pitch == other.pitch and self.yaw == other.yaw and self.roll == other.roll:
@@ -55,19 +53,19 @@ class Rotation():
         return f"{type(self).__name__}(roll = {self.roll}, pitch = {self.pitch}, yaw = {self.yaw}, quaternion = {self._quaternion})\n"
 
     def get_quaternion(self):
-        return self._quaternion
+        return self.__quaternion
 
     def get_up_vector(self):
         up = Vector3(0.0, 0.0, 1.0)
-        return self._quaternion * up
+        return self.__quaternion * up
 
     def get_right_vector(self):
         right = Vector3(0.0, -1.0, 0.0)
-        return self._quaternion * right
+        return self.__quaternion * right
 
     def get_forward_vector(self):
         forward = Vector3(1.0, 0, 0)
-        return self._quaternion * forward
+        return self.__quaternion * forward
 
 class Transform():
     """
@@ -77,9 +75,9 @@ class Transform():
     def __init__(self, location=Vector3(), rotation=Rotation()):
         self.location = location
         self.rotation = rotation
-        self._matrix = Matrix4()
-        self._matrix.rotate_euler(rotation.heading, rotation.attitude, rotation.bank)
-        self._matrix.translate(location.x, location.y, location.z)
+        self.__matrix = Matrix4()
+        self.__matrix.rotate_euler(rotation.heading, rotation.attitude, rotation.bank)
+        self.__matrix.translate(location.x, location.y, location.z)
     
     def __eq__(self, other):
         return self.location == other.location and self.rotation == other.rotation
@@ -88,22 +86,22 @@ class Transform():
         return not self.__eq__(other)
     
     def __str__(self, other):
-        return self._matrix.__str__
+        return self.__matrix.__str__
 
     def __repr__(self, other):
-        return self._matrix.__repr__
+        return self.__matrix.__repr__
     
     def transform(self, p = Point3()):
-        return self._matrix.transform(p)
+        return self.__matrix.transform(p)
     
     def get_forward_vector(self):
         return self.rotation.get_forward_vector()
 
     def get_inverse_matrix(self):
-        return self._matrix.inverse()
+        return self.__matrix.inverse()
 
     def get_matrix(self):
-        return self._matrix
+        return self.__matrix
 
     def get_right_vector(self):
         return self.rotation.get_right_vector()
