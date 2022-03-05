@@ -21,14 +21,21 @@ import sys
 import os
 import errno
 
-from matplotlib.patches import Ellipse, Circle
+# from matplotlib.patches import Ellipse, Circle
+import matplotlib.patches as patches
 from cvxopt import matrix, solvers, spdiag, sqrt
+from euclid import *
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) +
                 "/PathPlanning/CubicSpline/")
 
+sys.path.append(os.path.dirname(os.path.abspath(__file__)) +
+                "/../")
+
 try:
     import cubic_spline_planner
+    from cbf.obstacles import Ellipse2D
+    from cbf.cbf import KBM_VC_CBF2D
 except:
     raise
 
@@ -301,7 +308,7 @@ def main():
 
     target_speed = 30.0 / 3.6  # [m/s]
 
-    max_simulation_time = 30.0
+    max_simulation_time = 20.0
 
     # Initial state
     state = State(x=-0.0, y=5.0, yaw=np.radians(20.0), v=0.0)
@@ -325,7 +332,8 @@ def main():
     # FLAGS and IMP. CONSTANTS
     USE_CBF = True
     ZERO_TOL = 1e-3
-    CBF_TYPE = 0 # 0: Ellipse, 1: Distance, 2: Ellipse - Acceleration Controlled
+    CBF_TYPE = 3 # 0: Ellipse, 1: Distance, 2: Ellipse - Acceleration Controlled
+                 # 3: Ellipse - API
     a_max = 2.29 # m/s^2
     a_min = -2.29
     # params for animation
@@ -385,6 +393,20 @@ def main():
                 print(" a: ", a_cbf, " delta: ", di_cbf)
                 print(" v: ", v_, " old a: ", a_, " old delta: ", di)
             
+            if CBF_TYPE == 3:
+                v_cbf = KBM_VC_CBF2D(gamma=gamma)
+                v_cbf.set_model_params(L=L)
+                v_cbf.obstacle_list2d.update({
+                    0: Ellipse2D(a=a, b=b, center=Point2(o_cx, o_cy))
+                })
+                v_cbf.update_state(p=Vector2(state.x, state.y), theta=state.yaw)
+                solver_op, u = v_cbf.solve_cbf(np.array([v_, di]))
+                v_cbf = u[0]
+                di_cbf = u[1]
+                state.update_by_vel(v_cbf, di_cbf)
+                print("v: ", v_cbf, " delta: ", di_cbf)
+                print("old v: ", v_, " old delta: ", di)
+            
             print("time: ", time)
             
         else:
@@ -425,7 +447,7 @@ def main():
             else:
                 plt.title("Speed[m/s]: 0")
                         
-            if CBF_TYPE == 1 or CBF_TYPE == 0:
+            if CBF_TYPE in [0, 1, 3]:
                 if(abs(v_cbf) > ZERO_TOL):
                     plt.text(0, 30, "CBF V[m/s]:" + str(v_cbf)[:4])
                 else:
@@ -440,6 +462,8 @@ def main():
                     plt.text(75, 25, "CBF Type: Ellipse")
                 if USE_CBF and (CBF_TYPE == 1):
                     plt.text(75, 25, "CBF Type: Distance")
+                if USE_CBF and (CBF_TYPE == 3):
+                    plt.text(75, 25, "CBF Type: Ellipse (API)")
 
                 if abs(v_cbf - target_speed) < ZERO_TOL:
                     cbf_active = False
@@ -472,8 +496,8 @@ def main():
             plt.text(0, 20, "Gamma: " + str(gamma)[:4])            
 
             ax = plt.gca()
-            obs_ellipse = Ellipse(xy=(o_cx, o_cy), width=a, height=b, ec='b', fc=(0,1,0,0.5), lw=2, ls='-.')
-            obs_dist_circle = Circle(xy=(o_cx, o_cy), radius=Ds, ls='--', lw=2, ec='k', fc=(0,1,0,0))
+            obs_ellipse = patches.Ellipse(xy=(o_cx, o_cy), width=a, height=b, ec='b', fc=(0,1,0,0.5), lw=2, ls='-.')
+            obs_dist_circle = patches.Circle(xy=(o_cx, o_cy), radius=Ds, ls='--', lw=2, ec='k', fc=(0,1,0,0))
             ax.add_patch(obs_ellipse)
             ax.add_patch(obs_dist_circle)
             # im = plt.imshow(animated=True)
@@ -519,7 +543,7 @@ def main():
         plt.ylabel("Speed[km/h]")
         plt.grid(True)
 
-        if CBF_TYPE == 0 or CBF_TYPE == 1:
+        if CBF_TYPE in [0, 1, 3]:
             plt.figure(4)
             plt.plot(t, delta_diff, "-g")
             plt.xlabel("Time[s]")
