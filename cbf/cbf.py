@@ -17,7 +17,7 @@ import numpy as np
 from cvxopt import matrix, solvers
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) +
-                "../obstacles")
+                "../")
 
 try:
     from obstacles import Ellipse2D, ObstacleList2D
