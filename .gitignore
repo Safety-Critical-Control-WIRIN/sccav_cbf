@@ -1,6 +1,9 @@
 # Ignoring irrelevant directories
 test_scripts/temp
 
+# Video extensions
+.mp4
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
