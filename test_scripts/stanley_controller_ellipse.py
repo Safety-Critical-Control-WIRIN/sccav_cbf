@@ -277,7 +277,9 @@ def CBF_A(s, u_des, cx, cy, a, b, gamma):
                  [ 0, 0] ])
     h = matrix([ -a_min, a_max ])
 
-    return solvers.cp(F, G=G, h=h)['x']
+    dims = {'l': 0, 'q': [], 's':  [3]}
+
+    return solvers.cp(F, G=G, h=h, dims=dims)['x']
     # return solvers.cp(F)['x']
 
 def saturation(x, x_min, x_max):
@@ -299,7 +301,7 @@ def main():
 
     target_speed = 30.0 / 3.6  # [m/s]
 
-    max_simulation_time = 40.0
+    max_simulation_time = 30.0
 
     # Initial state
     state = State(x=-0.0, y=5.0, yaw=np.radians(20.0), v=0.0)
@@ -323,7 +325,7 @@ def main():
     # FLAGS and IMP. CONSTANTS
     USE_CBF = True
     ZERO_TOL = 1e-3
-    CBF_TYPE = 2 # 0: Ellipse, 1: Distance, 2: Ellipse - Acceleration Controlled
+    CBF_TYPE = 0 # 0: Ellipse, 1: Distance, 2: Ellipse - Acceleration Controlled
     a_max = 2.29 # m/s^2
     a_min = -2.29
     # params for animation
@@ -341,7 +343,7 @@ def main():
 
         # Implementing the CBF
         if USE_CBF:
-            gamma = 0.1
+            gamma = 1
             
             Dbuffer = 1
             Ds = max(a, b)/2 + Dbuffer
