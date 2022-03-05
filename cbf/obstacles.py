@@ -32,6 +32,36 @@ DICT_EMPTY_UPDATE = ()
 # Object Selectors for utility
 ELLIPSE2D = 0
 
+class BoundingBox():
+    def __init__(self, extent=Vector3(), location=Vector3(), rotation=Rotation()):
+        self.extent = extent
+        self.location = location
+        self.rotation = rotation
+
+    def __eq__(self, other):
+        return self.location == other.location and self.extent == other.extent
+    
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def get_local_vertices(self):
+        up = self.rotation.get_up_vector().normalized()
+        right = self.rotation.get_right_vector().normalized()
+        forward = self.rotation.get_forward_vector().normalized()
+        v1 = -self.extent.z*up + self.extent.x*forward + self.extent.y*right
+        v2 = -self.extent.z*up + self.extent.x*forward - self.extent.y*right
+        v3 = -self.extent.z*up - self.extent.x*forward - self.extent.y*right
+        v4 = -self.extent.z*up - self.extent.x*forward + self.extent.y*right
+        v5 = self.extent.z*up + self.extent.x*forward + self.extent.y*right
+        v6 = self.extent.z*up + self.extent.x*forward - self.extent.y*right
+        v7 = self.extent.z*up - self.extent.x*forward - self.extent.y*right
+        v8 = self.extent.z*up - self.extent.x*forward + self.extent.y*right
+        return [v1, v2, v3, v4, v5, v6, v7, v8]
+
+    def get_world_vertices(self, transform=Transform):
+        v_list = self.get_local_vertices()
+        return [transform.transform(v) for v in v_list]
+
 class Obstacle2DBase():
     """
     The base class each 2D obstacle class will inherit from. Created to enforce specific
@@ -184,7 +214,10 @@ class Ellipse2D(Obstacle2DBase):
     def updateOrientation(self, yaw):
         self.theta = yaw
 
-    def updateByBoundingBox(self, BBox):
+    def updateByBoundingBox(self, BBox=BoundingBox()):
+        if not isinstance(BBox, BoundingBox):
+            raise TypeError("Expected an object of type cbf.obstacles.BoundingBox as an input to fromBoundingBox() method, but got ", type(BBox).__name__)
+            
         a = BBox.extent.x
         b = BBox.extent.y
         center = Vector2(BBox.location.x, BBox.location.y)
@@ -201,9 +234,9 @@ class Ellipse2D(Obstacle2DBase):
         return f"{type(self).__name__}(a = {self.a}, b = {self.b}, center = {self.center}, theta = {self.theta}, buffer = {self.buffer}, buffer_applied: {self.BUFFER_FLAG} )\n"
     
     @classmethod
-    def fromBoundingBox(cls, BBox, buffer = 0.5):
-        if not isinstance(BBox, carla.BoundingBox):
-            raise TypeError("Expected an object of type carla.BoundingBox as an input to fromCarlaBoundingBox() method, but got ", type(BBox).__name__)
+    def fromBoundingBox(cls, BBox = BoundingBox(), buffer = 0.5):
+        if not isinstance(BBox, BoundingBox):
+            raise TypeError("Expected an object of type cbf.obstacles.BoundingBox as an input to fromBoundingBox() method, but got ", type(BBox).__name__)
         
         a = BBox.extent.x
         b = BBox.extent.y
@@ -300,33 +333,3 @@ class ObstacleList2D(MutableMapping):
             df[idx,:] = obs.gradient(p).T
             idx = idx + 1
         return df
-
-class BoundingBox():
-    def __init__(self, extent=Vector3(), location=Vector3(), rotation=Rotation()):
-        self.extent = extent
-        self.location = location
-        self.rotation = rotation
-
-    def __eq__(self, other):
-        return self.location == other.location and self.extent == other.extent
-    
-    def __ne__(self, other):
-        return not self.__eq__(other)
-
-    def get_local_vertices(self):
-        up = self.rotation.get_up_vector().normalized()
-        right = self.rotation.get_right_vector().normalized()
-        forward = self.rotation.get_forward_vector().normalized()
-        v1 = -self.extent.z*up + self.extent.x*forward + self.extent.y*right
-        v2 = -self.extent.z*up + self.extent.x*forward - self.extent.y*right
-        v3 = -self.extent.z*up - self.extent.x*forward - self.extent.y*right
-        v4 = -self.extent.z*up - self.extent.x*forward + self.extent.y*right
-        v5 = self.extent.z*up + self.extent.x*forward + self.extent.y*right
-        v6 = self.extent.z*up + self.extent.x*forward - self.extent.y*right
-        v7 = self.extent.z*up - self.extent.x*forward - self.extent.y*right
-        v8 = self.extent.z*up - self.extent.x*forward + self.extent.y*right
-        return [v1, v2, v3, v4, v5, v6, v7, v8]
-
-    def get_world_vertices(self, transform=Transform):
-        v_list = self.get_local_vertices()
-        return [transform.transform(v) for v in v_list]
