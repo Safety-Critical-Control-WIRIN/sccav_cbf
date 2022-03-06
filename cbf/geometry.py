@@ -67,6 +67,7 @@ class Rotation():
         forward = Vector3(1.0, 0, 0)
         return self.__quaternion * forward
 
+
 class Transform():
     """
     A CARLA style implementation of the Transform object by wrapping

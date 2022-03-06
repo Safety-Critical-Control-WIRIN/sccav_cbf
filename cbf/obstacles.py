@@ -103,12 +103,12 @@ class Obstacle2DBase():
     def update(self):
         pass
 
-    def updateCoords(self, xy):
+    def update_coords(self, xy):
         if not isinstance(xy, Vector2):
             raise TypeError("Expected an object of type euclid.Vector2 for arg p, but got " + type(xy).__name__ + ".")
         pass
 
-    def updateOrientation(self):
+    def update_orientation(self):
         pass
 
 class Ellipse2D(Obstacle2DBase):
@@ -127,7 +127,7 @@ class Ellipse2D(Obstacle2DBase):
         self.buffer = buffer
         self.BUFFER_FLAG = True
     
-    def applyBuffer(self):
+    def apply_buffer(self):
         if not self.BUFFER_FLAG:
             self.a = self.a + self.buffer
             self.b = self.b + self.buffer
@@ -135,7 +135,7 @@ class Ellipse2D(Obstacle2DBase):
         else:
             warnings.warn("Warning: Buffer already applied. Call Ignored.")
         
-    def removeBuffer(self):
+    def remove_buffer(self):
         if self.BUFFER_FLAG:
             self.a = self.a - self.buffer
             self.b = self.b - self.buffer
@@ -207,21 +207,21 @@ class Ellipse2D(Obstacle2DBase):
             else:
                 self.buffer = buffer
     
-    def updateCoords(self, xy):
-        super().updateCoords(xy)
+    def update_coords(self, xy):
+        super().update_coords(xy)
         self.center = xy
 
-    def updateOrientation(self, yaw):
+    def update_orientation(self, yaw):
         self.theta = yaw
 
-    def updateByBoundingBox(self, BBox=BoundingBox()):
-        if not isinstance(BBox, BoundingBox):
-            raise TypeError("Expected an object of type cbf.obstacles.BoundingBox as an input to fromBoundingBox() method, but got ", type(BBox).__name__)
+    def update_by_bounding_box(self, bbox=BoundingBox()):
+        if not isinstance(bbox, BoundingBox):
+            raise TypeError("Expected an object of type cbf.obstacles.BoundingBox as an input to fromBoundingBox() method, but got ", type(bbox).__name__)
             
-        a = BBox.extent.x
-        b = BBox.extent.y
-        center = Vector2(BBox.location.x, BBox.location.y)
-        theta = BBox.rotation.yaw
+        a = bbox.extent.x
+        b = bbox.extent.y
+        center = Vector2(bbox.location.x, bbox.location.y)
+        theta = bbox.rotation.yaw
         self.update(a=a, b=b, center=center, theta=theta)
 
     def dtheta(self, p):
@@ -234,14 +234,14 @@ class Ellipse2D(Obstacle2DBase):
         return f"{type(self).__name__}(a = {self.a}, b = {self.b}, center = {self.center}, theta = {self.theta}, buffer = {self.buffer}, buffer_applied: {self.BUFFER_FLAG} )\n"
     
     @classmethod
-    def fromBoundingBox(cls, BBox = BoundingBox(), buffer = 0.5):
-        if not isinstance(BBox, BoundingBox):
-            raise TypeError("Expected an object of type cbf.obstacles.BoundingBox as an input to fromBoundingBox() method, but got ", type(BBox).__name__)
+    def from_bounding_box(cls, bbox = BoundingBox(), buffer = 0.5):
+        if not isinstance(bbox, BoundingBox):
+            raise TypeError("Expected an object of type cbf.obstacles.BoundingBox as an input to fromBoundingBox() method, but got ", type(bbox).__name__)
         
-        a = BBox.extent.x
-        b = BBox.extent.y
-        center = Vector2(BBox.location.x, BBox.location.y)
-        theta = BBox.rotation.yaw
+        a = bbox.extent.x
+        b = bbox.extent.y
+        center = Vector2(bbox.location.x, bbox.location.y)
+        theta = bbox.rotation.yaw
         return cls(a, b, center, theta, buffer)
         
 class ObstacleList2D(MutableMapping):
@@ -275,7 +275,7 @@ class ObstacleList2D(MutableMapping):
     def __repr__(self):
         return f"{type(self).__name__}({self.mapping})"
 
-    def updateByBoundingBox(self, obs_dict=None, obs_type=ELLIPSE2D, buffer=0.5):
+    def update_by_bounding_box(self, bbox_dict=None, obs_type=ELLIPSE2D, buffer=0.5):
         """
         Will update the obstacle based on the dynamic obstacle
         list criteria. Remove the IDs which are not present in
@@ -283,15 +283,15 @@ class ObstacleList2D(MutableMapping):
         the IDs which have changed locations for reformulation 
         of the contained obstacle objects.
         """
-        if obs_dict is not None:
-            for key, bbox in obs_dict.items():
+        if bbox_dict is not None:
+            for key, bbox in bbox_dict.items():
                 if key in self.mapping.keys():
-                    self.mapping[key].updateByBoundingBox(bbox)
+                    self.mapping[key].update_by_bounding_box(bbox)
                 else:
                     if obs_type == ELLIPSE2D:
-                        self.__setitem__(key, Ellipse2D.fromBoundingBox(bbox, buffer))
+                        self.__setitem__(key, Ellipse2D.from_bounding_box(bbox, buffer))
             for key in self.mapping.keys():
-                if key not in obs_dict.keys():
+                if key not in bbox_dict.keys():
                     self.pop(key)
 
     def f(self, p):

@@ -308,7 +308,7 @@ def main():
 
     target_speed = 30.0 / 3.6  # [m/s]
 
-    max_simulation_time = 20.0
+    max_simulation_time = 30
 
     # Initial state
     state = State(x=-0.0, y=5.0, yaw=np.radians(20.0), v=0.0)
@@ -325,7 +325,7 @@ def main():
     # Elliptical Obstacle on Track
     a = 20
     b = 10
-    obs_idx = int(last_idx*0.50) # Obstacle on 75% of the trajectory
+    obs_idx = int(last_idx*0.75) # Obstacle on 75% of the trajectory
     o_cx = cx[obs_idx]
     o_cy = cy[obs_idx]
 

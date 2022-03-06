@@ -11,7 +11,6 @@ author: Neelaksh Singh
 
 import sys
 import os
-import errno
 
 import numpy as np
 from cvxopt import matrix, solvers
