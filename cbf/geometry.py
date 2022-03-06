@@ -21,13 +21,14 @@ class Rotation():
     Note now that we will use a right handed coordinate system. So, Y
     points towards "left" => Z is upwards.
     """
-    def __init__(self, roll=0.0, pitch=0.0, yaw=0.0):
+    def __init__(self, roll=0.0, pitch=0.0, yaw=0.0, right_handed=True):
         self.pitch = pitch
         self.yaw = yaw
         self.roll = roll
         self.heading = self.yaw
         self.attitude = self.pitch
         self.bank = self.roll
+        self.right_handed = right_handed
         # Euclid uses the h, a, b system which corresponds to
         # euler angles as follows:
         # Heading  => Yaw
@@ -60,8 +61,12 @@ class Rotation():
         return self.__quaternion * up
 
     def get_right_vector(self):
-        right = Vector3(0.0, -1.0, 0.0)
-        return self.__quaternion * right
+        if self.right_handed:
+            right = Vector3(0.0, -1.0, 0.0)
+            return self.__quaternion * right
+        else:
+            right = Vector3(0.0, 1.0, 0.0)
+            return self.__quaternion * right
 
     def get_forward_vector(self):
         forward = Vector3(1.0, 0, 0)
