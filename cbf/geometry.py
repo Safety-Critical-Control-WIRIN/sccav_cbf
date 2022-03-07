@@ -28,7 +28,7 @@ class Rotation():
         self.heading = self.yaw
         self.attitude = self.pitch
         self.bank = self.roll
-        self.right_handed = right_handed
+        self.__right_handed = right_handed
         # Euclid uses the h, a, b system which corresponds to
         # euler angles as follows:
         # Heading  => Yaw
@@ -53,6 +53,9 @@ class Rotation():
     def __repr__(self):
         return f"{type(self).__name__}(roll = {self.roll}, pitch = {self.pitch}, yaw = {self.yaw}, quaternion = {self._quaternion})\n"
 
+    def set_right_handed_flag(self, _right_handed):
+        self.__right_handed = _right_handed
+
     def get_quaternion(self):
         return self.__quaternion
 
@@ -61,7 +64,7 @@ class Rotation():
         return self.__quaternion * up
 
     def get_right_vector(self):
-        if self.right_handed:
+        if self.__right_handed:
             right = Vector3(0.0, -1.0, 0.0)
             return self.__quaternion * right
         else:
@@ -99,6 +102,10 @@ class Transform():
     
     def transform(self, p = Point3()):
         return self.__matrix.transform(p)
+    
+    def transform_inverse(self, p = Point3()):
+        matrix_inv = self.__matrix.inverse()
+        return matrix_inv.transform(p)
     
     def get_forward_vector(self):
         return self.rotation.get_forward_vector()
