@@ -5,7 +5,6 @@ import time
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.transforms import Affine2D
-from sympy import false
 import cv2
 import numpy as np
 from euclid import *

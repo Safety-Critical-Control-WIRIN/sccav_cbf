@@ -15,7 +15,7 @@ from pygame import Vector2, Vector3
 from cbf.geometry import Transform
 
 try:
-    sys.path.append(glob.glob('../carla/dist/carla-*%d.%d-%s.egg' % (
+    sys.path.append(glob.glob('/home/stoch-lab/PycharmProjects/Carla/CARLA_0.9.8/PythonAPI/carla/dist' % (
         sys.version_info.major,
         sys.version_info.minor,
         'win-amd64' if os.name == 'nt' else 'linux-x86_64'))[0])
