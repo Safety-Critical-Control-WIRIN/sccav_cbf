@@ -1,0 +1,77 @@
+%% code for Safety critical control implementation: 
+% static obstacle with the vehicle travelling in a straight line
+% 
+clc;
+clear all;
+close all;
+
+r = 1;                      % denotes the radius of the obstacle
+dt = 0.001;                 % denotes the time step for the numerical routine
+t = 0:dt:6;                 % denotes the starting and final time steps
+cx = 4;                     % x-coordinate of the static obstacle
+cy = 3;                     % y-coordinate of the static obstacle
+u_ref = [0;0];              % defining reference control
+
+X_0 = [0;0];                % starting position of the vehicle
+U = zeros(2, length(t)-1);  % array for storing the reference control inputs 
+X = zeros(2, length(t));    % array for storing the actual positions traversed by the vehicle
+alpha = @(k) 500*tanh(k);   % function that is used to tell how to react to the obstacle h(x) in the paper
+
+X(:,1) = X_0;               
+Hh = zeros(1,length(t)-1);  % array to store the values of h(x)
+for i=1:length(t)-1
+    
+    x = X(1,i);             % current x position
+    y = X(2,i);             % current y coordinate
+    
+    % defining quadprog matrices
+    H = eye(2,2);           
+    f = [0;0];
+    
+    h =  sqrt((x - cx)^2 +  (y - cy)^2) - r^2 ;
+    A = [(x - cx)/sqrt((x - cx)^2 +  (y - cy)^2), (y-cy)/sqrt((x - cx)^2 +  (y - cy)^2)]; 
+    
+    Hh(1,i) = h;
+    b = (alpha(h) + A*u_ref );
+    
+    % finding out the optimal control using the quadprog solver
+    delta = quadprog(H,f,-A,b);
+    
+    
+    u = u_ref + delta;
+    U(:,i) = u;
+    X(:,i+1) = X(:,i) + (u)*dt;
+end
+theta = 0:0.01:2*pi;
+figure 
+plot(X(1,:),X(2,:))
+hold on 
+plot(r*cos(theta) + cx, r*sin(theta)+cy)
+hold off
+title('System vs static obstacle')
+legend('path of the system', 'Static Obstacle')
+axis([0,6,0,6])
+
+figure 
+subplot(2,1,1)
+plot(t(1:length(t)-1), U(1,:))
+title('Input u1')
+legend('ux')
+subplot(2,1,2)
+plot(t(1:length(t)-1), U(2,:))
+title('Input u2')
+legend('uy')
+
+
+figure 
+subplot(2,1,1)
+plot(t, X(1,:))
+title('x vs t')
+subplot(2,1,2)
+plot(t,X(2,:))
+title('y vs t')
+
+figure 
+plot(t(1:length(t)-1),Hh)
+title('h(x)')
+axis([0,6,-1,8])
