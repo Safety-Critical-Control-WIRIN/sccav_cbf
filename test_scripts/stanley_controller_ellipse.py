@@ -35,7 +35,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)) +
 try:
     import cubic_spline_planner
     from cbf.obstacles import Ellipse2D
-    from cbf.cbf import KBM_VC_CBF2D
+    from cbf.cbf import KBM_VC_CBF2D, DBM_CBF_2DS
 except:
     raise
 
@@ -393,15 +393,30 @@ def main():
 
             if CBF_TYPE == 2:
                 a_ = pid_control(target_speed, state.v)
-                beta_ = np.arctan2(lr * np.tan(di), lf + lr)
-                u_des = np.array([a_, beta_])
-                s = np.array([ state.x, state.y, state.yaw, state.v ])
-                u = CBF_A(s, u_des, o_cx, o_cy, a, b, gamma)
-                # a_cbf = saturation(u[0], a_min, a_max)
+
+                ## Without Class ##
+                # beta_ = np.arctan2(lr * np.tan(di), lf + lr)
+                # u_des = np.array([a_, beta_])
+                # s = np.array([ state.x, state.y, state.yaw, state.v ])
+                # u = CBF_A(s, u_des, o_cx, o_cy, a, b, gamma)
+                # # a_cbf = saturation(u[0], a_min, a_max)
+                # a_cbf = u[0]
+                # beta_cbf = u[1]
+                # di_cbf = np.arctan2((lf + lr)*np.tan(beta_cbf), lr)
+
+                ## With Class ##
+                cbf_controller = DBM_CBF_2DS(alpha=gamma)
+                cbf_controller.set_model_params(lr=lr, lf=lf)
+                cbf_controller.obstacle_list2d.update({
+                    0: Ellipse2D(a=a, b=b, center=Point2(o_cx, o_cy))
+                })
+                p=Vector2(state.x, state.y)
+                cbf_controller.update_state(p, state.v, state.yaw)
+                u = cbf_controller.solve_cbf(np.array([a_, di]))
                 a_cbf = u[0]
-                beta_cbf = u[1]
-                di_cbf = np.arctan2((lf + lr)*np.tan(beta_cbf), lr)
+                di_cbf = u[1]
                 delta_cbf[i] = di_cbf
+
                 state.update_com(a_cbf, di_cbf)
                 print(" a: ", a_cbf, " delta: ", di_cbf)
                 print(" v: ", v_, " old a: ", a_, " old delta: ", di)

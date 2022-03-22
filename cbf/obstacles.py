@@ -100,6 +100,11 @@ class Obstacle2DBase():
             raise TypeError("Expected an object of type euclid.Vector2 for arg p, but got " + type(p).__name__ + ".")
         return 0
 
+    def dv(self, p):
+        if not isinstance(p, Vector2):
+            raise TypeError("Expected an object of type euclid.Vector2 for arg p, but got " + type(p).__name__ + ".")
+        return 0
+
     def update(self):
         pass
 
@@ -187,6 +192,12 @@ class Ellipse2D(Obstacle2DBase):
 
         dy_ = (2 * st/(self.a**2)) * ( xd * ct + yd * st ) + (2 * ct/(self.b**2)) * ( -xd * st + yd * ct )
         return dy_
+
+    def dv(self, p):
+        """
+        Despite being zero. This function is still created for the sake of completeness w.r.t API.
+        """
+        return super().dy(p)
     
     def update(self, a=None, b=None, center=None, theta=None, buffer=None):
         if a is not None:
@@ -325,6 +336,14 @@ class ObstacleList2D(MutableMapping):
             dtheta[idx] = obs.dtheta(p)
             idx = idx + 1
         return dtheta
+    
+    def dv(self, p):
+        dv = matrix(0.0, (len(self.mapping), 1))
+        idx = 0
+        for obs in self.mapping.values():
+            dv[idx] = obs.dv(p)
+            idx = idx + 1
+        return dv
 
     def gradient(self, p):
         df = matrix(0.0, (len(self.mapping), 3))
