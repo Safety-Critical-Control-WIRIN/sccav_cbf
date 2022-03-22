@@ -55,8 +55,8 @@ class KBM_VC_CBF2D():
         u_ref[1] = u_ref[0] * np.tan(u_ref[1])/self.__L
 
         if len(self.obstacle_list2d) < 1:
-            raise ValueError("Cannot solve CBF for an empty obstacle list.\
-                Update the obstacle list so that it is non-empty in order \
+            raise ValueError("Cannot solve CBF for an empty obstacle list. \
+                Update the obstacle list so that it is non-empty in order  \
                 to move forward.")
 
         def F(x = None, z=None):
@@ -86,5 +86,5 @@ class KBM_VC_CBF2D():
         
         solver_op = solvers.cp(F)
         u = solver_op['x']
-        u[1] = np.arctan(u[1] * self.__L / u_ref[0])
+        u[1] = np.arctan2(u[1] * self.__L, u_ref[0])
         return solver_op, u

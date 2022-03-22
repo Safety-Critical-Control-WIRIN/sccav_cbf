@@ -10,15 +10,17 @@ import glob
 import os
 import sys
 
-from pygame import Vector2, Vector3
-
-from cbf.geometry import Transform
-
 try:
-    sys.path.append(glob.glob('/home/stoch-lab/PycharmProjects/Carla/CARLA_0.9.8/PythonAPI/carla/dist' % (
-        sys.version_info.major,
-        sys.version_info.minor,
-        'win-amd64' if os.name == 'nt' else 'linux-x86_64'))[0])
+    # sys.path.append(glob.glob('/home/stoch-lab/PycharmProjects/Carla/CARLA_0.9.8/PythonAPI/carla/dist' % (
+    #     sys.version_info.major,
+    #     sys.version_info.minor,
+    #     'win-amd64' if os.name == 'nt' else 'linux-x86_64'))[0])
+    # sys.path.append(glob.glob('D:\\carla-simulator\\PythonAPI\\carla\\dist\\carla-*%d.%d-%s.egg' % (
+    #     sys.version_info.major,
+    #     sys.version_info.minor,
+    #     'win-amd64' if os.name == 'nt' else 'linux-x86_64'))[0])
+    sys.path.append(glob.glob('D:\\carla-simulator\\PythonAPI\\carla\\dist\\carla-0.9.13-py3.7-win-amd64.egg')[0])
+
 except IndexError:
     pass
 
@@ -55,6 +57,8 @@ try:
     from cbf.geometry import Rotation, Transform
 except:
     raise
+
+import euclid
 
 # from __ import bbox
 IMG_WIDTH = 1280
@@ -190,7 +194,8 @@ def main():
         # The CBF Controller Object
         gamma = 1.0
         cbf_controller = KBM_VC_CBF2D(gamma=gamma)
-        cbf_controller.set_model_params(L=ego.bounding_box.extent.z)
+        L = ego.bounding_box.extent.x * 2
+        cbf_controller.set_model_params(L=L)
 
         # Create a synchronous mode context.
         with CarlaSyncMode(world, camera_rgb, fps=30) as sync_mode:
@@ -212,13 +217,13 @@ def main():
                     cv2.imshow('obstacle map', img)
                     cv2.waitKey(1)
 
-                
                 # obstacles_list is a dictionary consisting of obstacles, 
                 # their actor_id being the key and corresponding BoundingBox object being the value
                 ## Using obstacles_list to update CBF constraints
                 cbf_controller.obstacle_list2d.update_by_bounding_box(bbox_dict=obstacles_list)
                 # Updating ego state (global coords) in CBF
-                cbf_controller.update_state(p=Vector2(obstacle_map.ego_x, obstacle_map.ego_y), theta=obstacle_map.ego_yaw)
+                p=euclid.Vector2(obstacle_map.ego_x, obstacle_map.ego_y)
+                cbf_controller.update_state(p=p, theta=obstacle_map.ego_yaw)
 
                 # Get Tf b/w ego local frame and world
                 ego_rotation = ego.get_transform().rotation
@@ -226,18 +231,22 @@ def main():
                 glob_to_loc_tf = Transform(rotation=ego_rotation)
 
                 # Setting local velocity
-                v_ref = 5 # m/s
-                delta_ref = 0 # rad/s
+                v_ref = 5.0 # m/s
+                delta_ref = 0.0 # rad/s
                 u_ref = np.array([v_ref, delta_ref])
 
                 # Passing u_ref through the CBF Safety Filter
-                solver_op, u = cbf_controller.solve_cbf(u_ref)
-                u_slv = solver_op['x']
-                v_cbf = u[0]
-                w_cbf = u_slv[1]
+                try:
+                    solver_op, u = cbf_controller.solve_cbf(u_ref)
+                    u_slv = solver_op['x']
+                    v_cbf = u[0]
+                    w_cbf = u_slv[1]
+                except ValueError as e:
+                    v_cbf = v_ref
+                    w_cbf = v_ref * np.tan(delta_ref)/L
 
-                v_cmd_local = Vector3(v_cbf, 0, 0)
-                w_cmd_local = Vector3(0, 0, w_cbf)
+                v_cmd_local = euclid.Vector3(v_cbf, 0, 0)
+                w_cmd_local = euclid.Vector3(0, 0, w_cbf)
 
                 # Tf to world coordinates
                 v_cmd_global = glob_to_loc_tf.transform_inverse(v_cmd_local)
@@ -246,8 +255,11 @@ def main():
                 # velocity = carla.Vector3D(5, 0, 0)
                 # ang_vel = carla.Vector3D(0, 0, 20)
                 # Give command to ego actor
-                vehicle.set_velocity(carla.Vector3D(v_cmd_global.x, v_cmd_global.y, v_cmd_global.z))
-                vehicle.set_angular_velocity(carla.Vector3D(w_cmd_global.x, w_cmd_global.y, w_cmd_global.z))
+                # vehicle.set_velocity(carla.Vector3D(v_cmd_global.x, v_cmd_global.y, v_cmd_global.z))
+                # vehicle.set_angular_velocity(carla.Vector3D(w_cmd_global.x, w_cmd_global.y, w_cmd_global.z))
+
+                vehicle.set_velocity(carla.Vector3D(0, -v_cbf, 0))
+                vehicle.set_angular_velocity(carla.Vector3D(0, 0, 0))
 
                 # Monitoring change
                 zero_tol = 1e-3

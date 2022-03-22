@@ -44,6 +44,8 @@ k = 0.5  # control gain
 Kp = 1.0  # speed proportional gain
 dt = 0.1  # [s] time difference
 L = 2.9  # [m] Wheel base of vehicle
+lr = L/2
+lf = L - lr
 max_steer = np.radians(30.0)  # [rad] max steering angle
 
 show_animation = True
@@ -102,6 +104,16 @@ class State(object):
         self.yaw += self.v / L * np.tan(delta) * dt
         self.yaw = normalize_angle(self.yaw)
         self.v = v_
+    
+    def update_com(self, acceleration, delta):
+        delta = np.clip(delta, -max_steer, max_steer)
+        beta = np.arctan2(lr * np.tan(delta), lf + lr)
+        
+        self.x += (self.v * np.cos(self.yaw) - self.v * np.sin(self.yaw) * beta) * dt
+        self.y += (self.v * np.sin(self.yaw) + self.v * np.cos(self.yaw) * beta) * dt
+        self.yaw += (self.v * beta/lr) * dt
+        self.v += acceleration * dt
+
 
 
 def pid_control(target, current):
@@ -246,7 +258,7 @@ def D_CBF(s, u_des, cx, cy, Ds, gamma):
         return f, Df, H
     return solvers.cp(F)['x']
 
-def CBF_A(s, u_des, cx, cy, a, b, gamma):
+def CBF_A(s, u_des, cx, cy, a, b, alpha):
     m = 1 # No. of Constraints
     n = 2 # Dimension of x0 i.e. u
     u_des = matrix(u_des)
@@ -265,9 +277,9 @@ def CBF_A(s, u_des, cx, cy, a, b, gamma):
         # temp vars are written as tn
         Dh1 = matrix([h1_dx, h1_dy, 0, 0], (1, 4))
         f_c = matrix([ s[3] * np.cos(s[2]), s[3] * np.sin(s[2]), 0, 0], (4, 1))
-        g_c = matrix([ [0, 0, 0, 1], [0, 0, 1, 0] ])
+        g_c = matrix([ [0, 0, 0, 1], [-s[3] * np.sin(s[2]), s[3] * np.cos(s[2]), s[3]/lr, 0] ])
 
-        f[1] = -(Dh1 * (f_c + g_c * x) + gamma * h1)
+        f[1] = -(Dh1 * (f_c + g_c * x) + alpha * h1)
 
         Df[0, :] = 2 * (x - u_des).T
         Df[1, :] = -1 * (Dh1 * g_c)
@@ -277,17 +289,17 @@ def CBF_A(s, u_des, cx, cy, a, b, gamma):
         return f, Df, H
 
     # Enforcing linear constraints on control i/p
-    a_max = 2.23 # m/s^2
-    a_min = 0
+    # a_max = 2.23 # m/s^2
+    # a_min = 0
 
-    G = matrix([ [-1, 1],
-                 [ 0, 0] ])
-    h = matrix([ -a_min, a_max ])
+    # G = matrix([ [-1, 1],
+    #              [ 0, 0] ])
+    # h = matrix([ -a_min, a_max ])
 
-    dims = {'l': 0, 'q': [], 's':  [3]}
+    # dims = {'l': 0, 'q': [], 's':  [3]}
 
-    return solvers.cp(F, G=G, h=h, dims=dims)['x']
-    # return solvers.cp(F)['x']
+    # return solvers.cp(F, G=G, h=h, dims=dims)['x']
+    return solvers.cp(F)['x']
 
 def saturation(x, x_min, x_max):
     if x >= x_max:
@@ -332,7 +344,7 @@ def main():
     # FLAGS and IMP. CONSTANTS
     USE_CBF = True
     ZERO_TOL = 1e-3
-    CBF_TYPE = 3 # 0: Ellipse, 1: Distance, 2: Ellipse - Acceleration Controlled
+    CBF_TYPE = 2 # 0: Ellipse, 1: Distance, 2: Ellipse - Acceleration Controlled
                  # 3: Ellipse - API
     a_max = 2.29 # m/s^2
     a_min = -2.29
@@ -381,31 +393,34 @@ def main():
 
             if CBF_TYPE == 2:
                 a_ = pid_control(target_speed, state.v)
-                u_des = np.array([a_, v_ * np.tan(di)/L])
+                beta_ = np.arctan2(lr * np.tan(di), lf + lr)
+                u_des = np.array([a_, beta_])
                 s = np.array([ state.x, state.y, state.yaw, state.v ])
-                u = CBF(s, u_des, o_cx, o_cy, a, b, gamma)
+                u = CBF_A(s, u_des, o_cx, o_cy, a, b, gamma)
                 # a_cbf = saturation(u[0], a_min, a_max)
                 a_cbf = u[0]
-                w_cbf = u[1]
-                di_cbf = np.arctan(w_cbf * L / v_)
+                beta_cbf = u[1]
+                di_cbf = np.arctan2((lf + lr)*np.tan(beta_cbf), lr)
                 delta_cbf[i] = di_cbf
-                state.update(a_cbf, di_cbf)
+                state.update_com(a_cbf, di_cbf)
                 print(" a: ", a_cbf, " delta: ", di_cbf)
                 print(" v: ", v_, " old a: ", a_, " old delta: ", di)
             
             if CBF_TYPE == 3:
-                v_cbf = KBM_VC_CBF2D(gamma=gamma)
-                v_cbf.set_model_params(L=L)
-                v_cbf.obstacle_list2d.update({
-                    0: Ellipse2D(a=a, b=b, center=Point2(o_cx, o_cy))
+                cbf_controller = KBM_VC_CBF2D(gamma=gamma)
+                cbf_controller.set_model_params(L=L)
+                cbf_controller.obstacle_list2d.update({
+                    0: Ellipse2D(a=a, b=b, center=Point2(o_cx, o_cy), buffer=20.0)
                 })
-                v_cbf.update_state(p=Vector2(state.x, state.y), theta=state.yaw)
-                solver_op, u = v_cbf.solve_cbf(np.array([v_, di]))
+                p=Vector2(state.x, state.y)
+                cbf_controller.update_state(p, theta=state.yaw)
+                solver_op, u = cbf_controller.solve_cbf(np.array([v_, di]))
                 v_cbf = u[0]
                 di_cbf = u[1]
                 state.update_by_vel(v_cbf, di_cbf)
                 print("v: ", v_cbf, " delta: ", di_cbf)
                 print("old v: ", v_, " old delta: ", di)
+                print("f: ", cbf_controller.obstacle_list2d.f(p))
             
             print("time: ", time)
             
@@ -486,12 +501,16 @@ def main():
                 if USE_CBF:
                     plt.text(75, 25, "CBF Type: Ellipse|A")
 
-                if abs(a_cbf - a_) < ZERO_TOL:
-                    cbf_active = False
-                    plt.text(0, 25, "CBF Status: Dormant")
+                trig_flag_a = abs(a_cbf - a_) >= ZERO_TOL
+                trig_flag_d = abs(di_cbf - di) >= ZERO_TOL
+                if trig_flag_a and trig_flag_d:
+                    plt.text(0, 25, "CBF Status: a, delta Triggered")
+                elif trig_flag_a: 
+                    plt.text(0, 25, "CBF Status: a Triggered")
+                elif trig_flag_d:
+                    plt.text(0, 25, "CBF Status: delta Triggered")
                 else:
-                    cbf_active = True
-                    plt.text(0, 25, "CBF Status: Triggered")
+                    plt.text(0, 25, "CBF Status: Dormant")
 
             plt.text(0, 20, "Gamma: " + str(gamma)[:4])            
 

@@ -28,6 +28,7 @@ c_y = 6     #y-position of the center
 c_x_dot = 0
 c_y_dot = 0
 vo = math.sqrt(c_x_dot**2 + c_y_dot**2) #Velocity of the obstacle
+# vo = 0
 a = 3 #Semi-Major axis
 b = 3 #Semi-Minor axis
 
