@@ -30,7 +30,7 @@ import carla
 
 class ObstacleMap:
 
-    def __init__(self, ego, world, display=True, range=30):
+    def __init__(self, ego, world, trajectory, display=True, range=30):
         """
         Initializing the ObstacleMap class with current ego vehicle, and world parameters
         :param ego: Vehicle object corresponding to the ego vehicle
@@ -46,6 +46,7 @@ class ObstacleMap:
         self.ego_y = None
         self.ego_x = None
         self.ego_yaw = None
+        self.trajectory = np.array(trajectory)[:,:2]
 
         self.walkers = None
         self.vehicles = None
@@ -126,6 +127,11 @@ class ObstacleMap:
                                                       fill=True,
                                                       fc='red'))
 
+    def plot_trajectory(self):
+        rel_traj_x = self.trajectory[:,0] - self.ego_x
+        rel_traj_y = self.trajectory[:,1] - self.ego_y
+        self.ax.plot(rel_traj_x, rel_traj_y)
+
     def refresh(self, ego, world):
         """
         Method to refresh the Obstacle map after every tick
@@ -148,6 +154,7 @@ class ObstacleMap:
 
     def get_obstacle_map(self):
         self.plot_actors(self.vehicles, self.walkers, buffer=1)
+        self.plot_trajectory()
         im = None
         if self.display:
             self.fig.canvas.draw()

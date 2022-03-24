@@ -63,4 +63,18 @@ def convert_LH_to_RH(flipped_axis = 'y', *args):
     else:
         raise ValueError("Invalid input to the flipped_axis argument. Expected values\
              from ['x', 'y', 'z']. Received " + flipped_axis)
-            
+
+def normalize_angle(angle):
+    """
+    Normalize an angle to [-pi, pi].
+
+    :param angle: (float)
+    :return: (float) Angle in radian in [-pi, pi]
+    """
+    while angle > np.pi:
+        angle -= 2.0 * np.pi
+
+    while angle < -np.pi:
+        angle += 2.0 * np.pi
+
+    return angle

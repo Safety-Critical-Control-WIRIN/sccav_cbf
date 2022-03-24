@@ -7,20 +7,16 @@
 # For a copy, see <https://opensource.org/licenses/MIT>.
 
 import glob
+import math
 import os
 import sys
 
 try:
-    # sys.path.append(glob.glob('/home/stoch-lab/PycharmProjects/Carla/CARLA_0.9.8/PythonAPI/carla/dist' % (
-    #     sys.version_info.major,
-    #     sys.version_info.minor,
-    #     'win-amd64' if os.name == 'nt' else 'linux-x86_64'))[0])
-    # sys.path.append(glob.glob('D:\\carla-simulator\\PythonAPI\\carla\\dist\\carla-*%d.%d-%s.egg' % (
-    #     sys.version_info.major,
-    #     sys.version_info.minor,
-    #     'win-amd64' if os.name == 'nt' else 'linux-x86_64'))[0])
-    sys.path.append(glob.glob('D:\\carla-simulator\\PythonAPI\\carla\\dist\\carla-0.9.13-py3.7-win-amd64.egg')[0])
-
+    sys.path.append(
+        glob.glob('/home/stoch-lab/PycharmProjects/Carla/CARLA_0.9.8/PythonAPI/carla/dist/carla-*%d.%d-%s.egg' % (
+            sys.version_info.major,
+            sys.version_info.minor,
+            'win-amd64' if os.name == 'nt' else 'linux-x86_64'))[0])
 except IndexError:
     pass
 
@@ -48,9 +44,11 @@ from matplotlib.patches import Rectangle, Ellipse
 from matplotlib.transforms import Affine2D
 import cv2
 from obstacle_map import ObstacleMap
+from bezier_path import Bezier
 
 sys.path.append(os.path.dirname(os.path.abspath('')) +
                 "../../")
+
 
 try:
     from cbf.cbf import KBM_VC_CBF2D
@@ -63,6 +61,7 @@ import euclid
 # from __ import bbox
 IMG_WIDTH = 1280
 IMG_HEIGHT = 720
+
 
 class CarlaSyncMode(object):
     """
@@ -167,18 +166,25 @@ def main():
     try:
         m = world.get_map()
         start_pose = random.choice(m.get_spawn_points())
-        start_pose.location.x = -6.5
-        start_pose.location.y = 60
-        start_pose.location.z = 0.2
+        start_pose.location.x = 5.4
+        start_pose.location.y = 66.2
+        start_pose.location.z = 0.1
+        start_pose.rotation.yaw = -90
 
         blueprint_library = world.get_blueprint_library()
 
         vehicle = world.spawn_actor(
-            random.choice(blueprint_library.filter('vehicle.*')),
+            random.choice(blueprint_library.filter('vehicle.mini.cooperst')),
             start_pose)
         ego = vehicle
         actor_list.append(vehicle)
         # vehicle.set_simulate_physics(False)
+        # physics = vehicle.get_physics_control()
+        # for i in range(4):
+        #     print(physics.wheels[i].tire_friction)
+        # for i in range(len(physics.torque_curve)):
+        #     print(physics.torque_curve[i].x)
+        #     print(physics.torque_curve[i].y)
 
         camera_bp = blueprint_library.find('sensor.camera.rgb')
         camera_bp.set_attribute("image_size_x", f"{IMG_WIDTH}")
@@ -189,17 +195,50 @@ def main():
             attach_to=vehicle)
         actor_list.append(camera_rgb)
 
-        obstacle_map = ObstacleMap(ego, world)
+        start_pose.location.x = 38.7
+        start_pose.location.y = 7.0
+        start_pose.rotation.yaw = 0
+        obstacle = world.spawn_actor(
+            random.choice(blueprint_library.filter('vehicle.*')),
+            start_pose)
+        # obstacle.set_velocity(carla.Vector3D(0, 5, 0))
+        actor_list.append(obstacle)
 
+        """Defining the trajectory"""
+        start_x = 5.3  # [m]
+        start_y = 46.2  # [m]
+        start_yaw = np.radians(-90.0)  # [rad]
+
+        end_x = 28.7  # [m]
+        end_y = 7.0  # [m]
+        end_yaw = np.radians(0.0)  # [rad]
+        offset = 3.0
+        resolution = 100
+        velocity = 5
+
+        bezier = Bezier(start_x, start_y, start_yaw, end_x, end_y, end_yaw, offset, resolution=100)
+        curve = bezier.get_trajectory(velocity= velocity)
+
+        straight1 = []
+        for t in np.linspace(66.2, 46.2, resolution):
+            straight1.append((5.3, t, -math.pi/2, velocity))
+
+        straight2 = []
+        for t in np.linspace(28.7, 54.8, resolution):
+            straight2.append((t, 7.0, -math.pi/2, velocity))
+
+        trajectory = straight1 + curve + straight2
+        obstacle_map = ObstacleMap(ego, world, trajectory, range=40)
         # The CBF Controller Object
-        gamma = 1.0
-        cbf_controller = KBM_VC_CBF2D(gamma=gamma)
+        gamma = 5.0
+        cbf_controller = KBM_VC_CBF2D()
         L = ego.bounding_box.extent.x * 2
         cbf_controller.set_model_params(L=L)
 
         # Create a synchronous mode context.
         with CarlaSyncMode(world, camera_rgb, fps=30) as sync_mode:
             while True:
+                n = 0
                 if should_quit():
                     return
                 clock.tick()
@@ -217,54 +256,45 @@ def main():
                     cv2.imshow('obstacle map', img)
                     cv2.waitKey(1)
 
-                # obstacles_list is a dictionary consisting of obstacles, 
+                # obstacles_list is a dictionary consisting of obstacles,
                 # their actor_id being the key and corresponding BoundingBox object being the value
-                ## Using obstacles_list to update CBF constraints
-                cbf_controller.obstacle_list2d.update_by_bounding_box(bbox_dict=obstacles_list)
+                # Using obstacles_list to update CBF constraints
+                cbf_controller.obstacle_list2d.update_by_bounding_box(bbox_dict=obstacles_list, buffer=8 + L/2)
                 # Updating ego state (global coords) in CBF
-                p=euclid.Vector2(obstacle_map.ego_x, obstacle_map.ego_y)
-                cbf_controller.update_state(p=p, theta=obstacle_map.ego_yaw)
-
-                # Get Tf b/w ego local frame and world
-                ego_rotation = ego.get_transform().rotation
-                ego_rotation = Rotation(ego_rotation.roll, ego_rotation.pitch, ego_rotation.yaw)
-                glob_to_loc_tf = Transform(rotation=ego_rotation)
+                p = euclid.Vector2(ego.get_transform().location.x, ego.get_transform().location.y)
+                cbf_controller.update_state(p=p, theta=ego.get_transform().rotation.yaw)
 
                 # Setting local velocity
-                v_ref = 5.0 # m/s
-                delta_ref = 0.0 # rad/s
+                v_ref = 10.0  # m/s
+                delta_ref = 0.0  # rad/s
                 u_ref = np.array([v_ref, delta_ref])
 
-                # Passing u_ref through the CBF Safety Filter
-                try:
+                if len(cbf_controller.obstacle_list2d) < 1:
+                    u = u_ref
+                    v_cbf = v_ref
+                    w_cbf = v_ref * np.tan(delta_ref) / L
+                else:
                     solver_op, u = cbf_controller.solve_cbf(u_ref)
                     u_slv = solver_op['x']
                     v_cbf = u[0]
                     w_cbf = u_slv[1]
-                except ValueError as e:
-                    v_cbf = v_ref
-                    w_cbf = v_ref * np.tan(delta_ref)/L
 
-                v_cmd_local = euclid.Vector3(v_cbf, 0, 0)
-                w_cmd_local = euclid.Vector3(0, 0, w_cbf)
-
-                # Tf to world coordinates
-                v_cmd_global = glob_to_loc_tf.transform_inverse(v_cmd_local)
-                w_cmd_global = glob_to_loc_tf.transform_inverse(w_cmd_local)
-
-                # velocity = carla.Vector3D(5, 0, 0)
-                # ang_vel = carla.Vector3D(0, 0, 20)
-                # Give command to ego actor
-                # vehicle.set_velocity(carla.Vector3D(v_cmd_global.x, v_cmd_global.y, v_cmd_global.z))
-                # vehicle.set_angular_velocity(carla.Vector3D(w_cmd_global.x, w_cmd_global.y, w_cmd_global.z))
+                # if (n%30 == 0):
+                #     print("v: ", v_cbf, " delta: ", u[1])
+                #     print("old v: ", v_ref, " old delta: ", 0)
+                #     # print(cbf_controller.obstacle_list2d)
+                #     print("L: ", L, " p: ", p)
+                #     print(cbf_controller.obstacle_list2d)
+                #     print("f: ", cbf_controller.obstacle_list2d.f(p).T)
 
                 vehicle.set_velocity(carla.Vector3D(0, -v_cbf, 0))
                 vehicle.set_angular_velocity(carla.Vector3D(0, 0, 0))
-
                 # Monitoring change
                 zero_tol = 1e-3
                 if abs(v_cbf - v_ref) > zero_tol:
                     obstacle_map.cbf_active = True
+                else:
+                    obstacle_map.cbf_active = False
 
                 fps = round(1.0 / snapshot.timestamp.delta_seconds)
 
@@ -279,6 +309,7 @@ def main():
                     (8, 28))
                 pygame.display.flip()
                 obstacle_map.refresh(ego, world)
+                n += 1
 
     finally:
 
