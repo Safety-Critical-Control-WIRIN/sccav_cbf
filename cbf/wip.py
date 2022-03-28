@@ -1,6 +1,8 @@
 #!/bin/python3
 """
 
+!CAUTION!: All WIP imports are subject to change.
+
 WIP -> Work in Progress. This file hosts the experimental objects
 which are under development to be added as stable features in the
 future. The purpose behind hosting the objects in a separate file

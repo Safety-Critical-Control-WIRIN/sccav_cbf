@@ -301,9 +301,14 @@ class ObstacleList2D(MutableMapping):
                 else:
                     if obs_type == ELLIPSE2D:
                         self.__setitem__(key, Ellipse2D.from_bounding_box(bbox, buffer))
+            
+            rm_keys = []
             for key in self.mapping.keys():
                 if key not in bbox_dict.keys():
-                    self.pop(key)
+                    rm_keys.append(key)
+            
+            for key in rm_keys:
+                self.pop(key)
 
     def f(self, p):
         f = matrix(0.0, (len(self.mapping), 1))

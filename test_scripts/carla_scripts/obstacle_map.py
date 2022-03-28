@@ -147,6 +147,7 @@ class ObstacleMap:
         self.ego_height = 2 * self.ego.bounding_box.extent.y
         self.ego_width = 2 * self.ego.bounding_box.extent.x
         self.ego_yaw = self.ego.get_transform().rotation.yaw
+        self.ego_v = self.ego.get_velocity()
         self.obstacles_list = {}
 
         if self.display:

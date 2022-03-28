@@ -78,3 +78,18 @@ def normalize_angle(angle):
         angle += 2.0 * np.pi
 
     return angle
+
+def sigmoid(x):
+    return 1/(1 + np.exp(-x))
+
+def saturation(x, x_min, x_max):
+    if x > x_max:
+        return x_max
+    elif x < x_min:
+        return x_min
+    else:
+        return x
+
+def get_closest_idx(x, x_list):
+    dx = [abs(x - ix) for ix in x_list]
+    return np.argmin(dx)
