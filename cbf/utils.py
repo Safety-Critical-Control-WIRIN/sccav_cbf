@@ -12,6 +12,7 @@ import sys
 import os
 
 import numpy as np
+
 from euclid import *
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) +
@@ -21,6 +22,28 @@ try:
     from cbf.geometry import Transform, Rotation
 except:
     raise
+
+class TimerError(Exception):
+    """ Custom Exception for Timer related errors. """
+    pass
+
+class Timer():
+    
+    def __init__(self, timestamp=0.0):
+        self.timestamp = timestamp
+        
+    @property
+    def timestamp(self):
+        return self.timestamp_
+    
+    @timestamp.setter
+    def timestamp(self, value):
+        if self.timestamp > value:
+            raise TimerError('''Negative time or Decreasing Timestamp trend detected.\
+                    Please make sure that the Timestamp is monotonically increasing when\
+                    manually set.''')
+        self.timestamp_ = value
+    
 
 def convert_LH_to_RH(flipped_axis = 'y', *args):
     if flipped_axis == 'y':

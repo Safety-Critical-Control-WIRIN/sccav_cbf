@@ -8,29 +8,44 @@ the obstacle list for use in real time simulation.
 author: Neelaksh Singh
 
 """
+# Removal of the following method for Type Hinting Enclosing
+# classes is possible. Be cautious about the changes.
+from __future__ import annotations
 
-import numpy as np
-from euclid import *
-from cvxopt import matrix
-
-import warnings
-from collections.abc import MutableMapping
 import sys
 import os
+import warnings
+import enum
+
+import numpy as np
+
+from euclid import *
+from cvxopt import matrix
+from collections.abc import MutableMapping
+
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) +
                 "../")
 
 try:
     from cbf.geometry import Rotation, Transform
+    from cbf.utils import Timer
 except:
     raise
 
 # Identity Objects
-DICT_EMPTY_UPDATE = ()
+class IdentityObjects(enum.Enum):
+    """
+    Enumerations for Required Empty Identity Objects.
+    """
+    DICT_EMPTY_UPDATE = ()
 
 # Object Selectors for utility
-ELLIPSE2D = 0
+class Obstacle2DTypes(enum.Enum):
+    """
+    Enumerations for the available 2D obstacle classes.
+    """
+    ELLIPSE2D = 0
 
 class BoundingBox():
     def __init__(self, extent=Vector3(), location=Vector3(), rotation=Rotation()):
@@ -245,7 +260,7 @@ class Ellipse2D(Obstacle2DBase):
         return f"{type(self).__name__}(a = {self.a}, b = {self.b}, center = {self.center}, theta = {self.theta}, buffer = {self.buffer}, buffer_applied: {self.BUFFER_FLAG} )\n"
     
     @classmethod
-    def from_bounding_box(cls, bbox = BoundingBox(), buffer = 0.5):
+    def from_bounding_box(cls, bbox = BoundingBox(), buffer = 0.5) -> Ellipse2D:
         if not isinstance(bbox, BoundingBox):
             raise TypeError("Expected an object of type cbf.obstacles.BoundingBox as an input to fromBoundingBox() method, but got ", type(bbox).__name__)
         
@@ -260,6 +275,7 @@ class ObstacleList2D(MutableMapping):
     def __init__(self, data=()):
         self.mapping = {}
         self.update(data)
+        self.timestamp = 0.0
     
     def __getitem__(self, key):
         return self.mapping[key]
@@ -285,8 +301,11 @@ class ObstacleList2D(MutableMapping):
     
     def __repr__(self):
         return f"{type(self).__name__}({self.mapping})"
+    
+    def set_timestamp(self, timestamp: float) -> None:
+        self.timestamp = timestamp
 
-    def update_by_bounding_box(self, bbox_dict=None, obs_type=ELLIPSE2D, buffer=0.5):
+    def update_by_bounding_box(self, bbox_dict=None, obs_type=Obstacle2DTypes.ELLIPSE2D, buffer=0.5) -> None:
         """
         Will update the obstacle based on the dynamic obstacle
         list criteria. Remove the IDs which are not present in
@@ -299,7 +318,7 @@ class ObstacleList2D(MutableMapping):
                 if key in self.mapping.keys():
                     self.mapping[key].update_by_bounding_box(bbox)
                 else:
-                    if obs_type == ELLIPSE2D:
+                    if obs_type == Obstacle2DTypes.ELLIPSE2D:
                         self.__setitem__(key, Ellipse2D.from_bounding_box(bbox, buffer))
             
             rm_keys = []
@@ -310,7 +329,7 @@ class ObstacleList2D(MutableMapping):
             for key in rm_keys:
                 self.pop(key)
 
-    def f(self, p):
+    def f(self, p: Point2) -> float:
         f = matrix(0.0, (len(self.mapping), 1))
         idx = 0
         for obs in self.mapping.values():
@@ -318,7 +337,7 @@ class ObstacleList2D(MutableMapping):
             idx = idx + 1
         return f
 
-    def dx(self, p):
+    def dx(self, p: Point2) -> float:
         dx = matrix(0.0, (len(self.mapping), 1))
         idx = 0
         for obs in self.mapping.values():
@@ -326,7 +345,7 @@ class ObstacleList2D(MutableMapping):
             idx = idx + 1
         return dx
 
-    def dy(self, p):
+    def dy(self, p: Point2) -> float:
         dy = matrix(0.0, (len(self.mapping), 1))
         idx = 0
         for obs in self.mapping.values():
@@ -334,7 +353,7 @@ class ObstacleList2D(MutableMapping):
             idx = idx + 1
         return dy
     
-    def dtheta(self, p):
+    def dtheta(self, p: Point2) -> float:
         dtheta = matrix(0.0, (len(self.mapping), 1))
         idx = 0
         for obs in self.mapping.values():
@@ -342,7 +361,7 @@ class ObstacleList2D(MutableMapping):
             idx = idx + 1
         return dtheta
     
-    def dv(self, p):
+    def dv(self, p: Point2) -> float:
         dv = matrix(0.0, (len(self.mapping), 1))
         idx = 0
         for obs in self.mapping.values():
@@ -350,7 +369,7 @@ class ObstacleList2D(MutableMapping):
             idx = idx + 1
         return dv
 
-    def gradient(self, p):
+    def gradient(self, p: Point2) -> float:
         df = matrix(0.0, (len(self.mapping), 3))
         idx = 0
         for obs in self.mapping.values():

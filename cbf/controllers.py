@@ -53,7 +53,6 @@ class LateralStanley():
         self.__y = y
         self.__yaw = yaw
         self.__v = v
-        print(f"Stanley State - yaw: {yaw}, x: {x}, y: {y}, v: {v} ")
     
     def set_gains(self, k, ks):
         self.__k = k
@@ -142,11 +141,10 @@ class LateralStanley():
         theta_e = normalize_angle(self.__yawdes[self.__current_target_idx] - self.__yaw)
         # theta_e = normalize_angle(yaw_des - self.__yaw)
         # theta_d corrects the cross track error
-        # theta_d = np.arctan2(self.__k * error_front_axle, self.__v + self.__ks)
-        theta_d = normalize_angle(np.arctan(self.__k * cross_track_error / (self.__ks + self.__v)))
+        theta_d = np.arctan2(self.__k * error_front_axle, self.__v + self.__ks)
+        # theta_d = normalize_angle(np.arctan(self.__k * cross_track_error / (self.__ks + self.__v)))
         # Steering control
         delta = theta_e + theta_d
-        print(f"error_front_axle: {error_front_axle}, theta_e: {theta_e}, theta_d: {theta_d}")
 
         self.__last_target_idx = self.__current_target_idx
 

@@ -43,6 +43,23 @@ class Rotation():
             return True
         else:
             return False
+        
+    def update(self, roll=0.0, pitch=0.0, yaw=0.0, right_handed=True):
+        self.pitch = pitch
+        self.yaw = yaw
+        self.roll = roll
+        self.heading = self.yaw
+        self.attitude = self.pitch
+        self.bank = self.roll
+        self.__right_handed = right_handed
+        # Euclid uses the h, a, b system which corresponds to
+        # euler angles as follows:
+        # Heading  => Yaw
+        # Attitude => Pitch
+        # Bank     => Roll
+        # All euclid quaternion functions expect the sequence 
+        # H, A, B => Y, P, R
+        self.__quaternion = Quaternion.new_rotate_euler(yaw, pitch, roll)       
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -74,6 +91,12 @@ class Rotation():
     def get_forward_vector(self):
         forward = Vector3(1.0, 0, 0)
         return self.__quaternion * forward
+    
+    @classmethod
+    def from_quaternion(cls, w=1.0, x=0.0, y=0.0, z=0.0):
+        quaternion = Quaternion(w=w, x=x, y=y, z=z)
+        heading, attitude, bank = quaternion.get_euler()
+        return cls(roll=bank, pitch=attitude, yaw=heading)
 
 
 class Transform():

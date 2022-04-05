@@ -5,6 +5,10 @@ carla_results
 # Video extensions
 .mp4
 
+# VS Code Configurations
+.vscode
+.idea
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
