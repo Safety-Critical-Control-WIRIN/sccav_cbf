@@ -41,6 +41,7 @@ class KBM_VC_CBF2D():
     def __init__(self, alpha = 1.0):
         self.obstacle_list2d = ObstacleList2D()
         self.__alpha = alpha
+        self.__R = matrix(np.eye(2))
         pass
     
     def update_state(self, p, theta):
@@ -52,6 +53,9 @@ class KBM_VC_CBF2D():
     
     def set_model_params(self, L):
         self.__L = L
+    
+    def set_qp_cost_weight(self, R):
+        self.__R = matrix(R)
     
     def solve_cbf(self, u_ref):
         """
@@ -77,8 +81,8 @@ class KBM_VC_CBF2D():
             f = matrix(0.0, (m+1, 1))
             Df = matrix(0.0, (m+1, n))
 
-            f[0] = (x - u_ref).T * (x - u_ref)
-            Df[0, :] = 2 * (x - u_ref).T
+            f[0] = (x - u_ref).T * self.__R * (x - u_ref)
+            Df[0, :] = 2 * (x - u_ref).T * self.__R
 
             gc = matrix([ [np.cos(self.__theta), np.sin(self.__theta), 0], [0, 0, 1] ])
             # G => Gradient, Gh -> (m,3)
@@ -119,6 +123,7 @@ class DBM_CBF_2DS():
         self.__p = Point2()
         self.__v = 0
         self.__theta = 0
+        self.__R = matrix(np.eye(2))
         pass
 
     def update_state(self, p, v, theta):
@@ -132,6 +137,11 @@ class DBM_CBF_2DS():
     def set_model_params(self, lr, lf):
         self.__lr = lr
         self.__lf = lf
+    
+    def set_qp_cost_weight(self, R):
+        self.__R = matrix(R)
+        if not (self.__R.size[0] == self.__R.size[1] or self.__R.size[0] == 2):
+            raise ValueError("Expected a symmetrix matrix of size 2 as input. Please check the value of the matrix R you are using.")
 
     def solve_cbf(self, u_ref, return_solver = False):
         """
@@ -158,15 +168,18 @@ class DBM_CBF_2DS():
             f = matrix(0.0, (m+1, 1))
             Df = matrix(0.0, (m+1, n))
 
-            f[0] = (x - u_ref).T * (x - u_ref)
-            Df[0, :] = 2 * (x - u_ref).T
+            f[0] = (x - u_ref).T * self.__R * (x - u_ref)
+            Df[0, :] = 2 * (x - u_ref).T * self.__R
 
             # State Equation:
-            g_c = matrix([ [0, 0, 0, 1], [-self.__v * np.sin(self.__theta), self.__v * np.cos(self.__theta), self.__v/self.__lr, 0] ])
+            g_c = matrix([ [0, 0, 0, 1],\
+                 [-self.__v * np.sin(self.__theta), self.__v * np.cos(self.__theta), self.__v/self.__lr, 0] ])
+
             f_c = matrix([ self.__v * np.cos(self.__theta), self.__v * np.sin(self.__theta), 0, 0], (4, 1))
 
             # G => Gradient, Gh -> (m,3)
-            Gh = matrix([ [self.obstacle_list2d.dx(self.__p)], [self.obstacle_list2d.dy(self.__p)], [self.obstacle_list2d.dtheta(self.__p)], [self.obstacle_list2d.dv(self.__p)] ])
+            Gh = matrix([ [self.obstacle_list2d.dx(self.__p)], [self.obstacle_list2d.dy(self.__p)],\
+                 [self.obstacle_list2d.dtheta(self.__p)], [self.obstacle_list2d.dv(self.__p)] ])
             
             Lxg_h = Gh * g_c
             Lxf_h = Gh * f_c
@@ -175,7 +188,7 @@ class DBM_CBF_2DS():
             Df[1:, :] = -Lxg_h
 
             if z is None: return f, Df
-            H = z[0] * 2 * matrix(np.eye(n))
+            H = z[0] * 2 * self.__R
             return f, Df, H
         
         solver_op = solvers.cp(F)

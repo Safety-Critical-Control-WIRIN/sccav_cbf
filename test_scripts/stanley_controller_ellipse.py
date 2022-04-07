@@ -309,6 +309,10 @@ def saturation(x, x_min, x_max):
     else:
         return x
 
+
+# The accelerating obstacle case.
+
+
 def main():
     """Plot an example of Stanley steering control on a cubic spline."""
     #  target course
@@ -337,7 +341,7 @@ def main():
     # Elliptical Obstacle on Track
     a = 20
     b = 10
-    obs_idx = int(last_idx*0.75) # Obstacle on 75% of the trajectory
+    obs_idx = int(last_idx*0.50) # Obstacle on 75% of the trajectory
     o_cx = cx[obs_idx]
     o_cy = cy[obs_idx]
 
@@ -412,6 +416,7 @@ def main():
                 })
                 p=Vector2(state.x, state.y)
                 cbf_controller.update_state(p, state.v, state.yaw)
+                cbf_controller.set_qp_cost_weight(np.diag([0.5, 20000.0]))
                 u = cbf_controller.solve_cbf(np.array([a_, di]))
                 a_cbf = u[0]
                 di_cbf = u[1]
