@@ -1,8 +1,13 @@
 # Ignoring irrelevant directories
 test_scripts/temp
+carla_results
 
 # Video extensions
 .mp4
+
+# VS Code Configurations
+.vscode
+.idea
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

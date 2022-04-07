@@ -13,6 +13,7 @@ import sys
 import os
 
 import numpy as np
+
 from cvxopt import matrix, solvers
 from euclid import *
 
@@ -21,12 +22,13 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)) +
 
 try:
     from cbf.obstacles import ObstacleList2D
+    from cbf.utils import Timer
 except:
     raise
 
 class KBM_VC_CBF2D():
     """
-    The Kinetic Bicycle Model - Velocity Controlled - Control Barrier Function.
+    The Kinematic Bicycle Model - Velocity Controlled - Control Barrier Function.
 
     Specs-
     Supported Obstacle State: Static
@@ -34,7 +36,7 @@ class KBM_VC_CBF2D():
     
     Observed Safety Actions : Braking
     
-    Solver Used       : CVXOPT.solvers.qp
+    Solver Used       : CVXOPT.solvers.cp
     Class K func used : alpha * h
     """
 
@@ -114,7 +116,7 @@ class DBM_CBF_2DS():
     
     Observed Safety Actions : Braking, Circumventing
     
-    Solver Used       : CVXOPT.solvers.qp
+    Solver Used       : CVXOPT.solvers.cp
     Class K func used : alpha * h
     """
     def __init__(self, alpha = 1.0):

@@ -153,7 +153,8 @@ for t in np.arange(time_start, time_end, delta_t):
         file_name = figures_folder_names + "/file"+str(counter).zfill(3)+".png" 
         plt.savefig(file_name, bbox_inches='tight')
         counter += 1
-    plt.show()
+    # plt.pause(delta_t)
+    # plt.show()
     
     
     # For Debugging
