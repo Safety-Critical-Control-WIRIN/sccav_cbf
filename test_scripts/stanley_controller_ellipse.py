@@ -68,6 +68,9 @@ class State(object):
         self.y = y
         self.yaw = yaw
         self.v = v
+    
+    def __repr__(self):
+        return f"Vehicle State(x: {self.x}, y: {self.y}, yaw: {self.yaw}, v: {self.v})"
 
     def update(self, acceleration, delta):
         """

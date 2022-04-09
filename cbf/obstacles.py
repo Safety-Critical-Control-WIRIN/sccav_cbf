@@ -119,7 +119,11 @@ class Obstacle2DBase():
         if not isinstance(p, Vector2):
             raise TypeError("Expected an object of type euclid.Vector2 for arg p, but got " + type(p).__name__ + ".")
         return 0
-
+    
+    def dt(self, p: Point2):
+        if not isinstance(p, Vector2):
+            raise TypeError("Expected an object of type euclid.Vector2 for arg p, but got " + type(p).__name__ + ".")
+        return 0
     def update(self):
         pass
 
@@ -132,20 +136,27 @@ class Obstacle2DBase():
         pass
 
 class Ellipse2D(Obstacle2DBase):
-    def __init__(self, a, b, center = Vector2(0, 0), theta=0, buffer=0):
-        """
-        Generates the 2D Ellipse obstacle representation for use in control barrier functions.
-        Exposes the required functionality for direct usage in CBF as a barrier constraint.
+    """
+    Generates the 2D Ellipse obstacle representation for use in control barrier functions.
+    Exposes the required functionality for direct usage in CBF as a barrier constraint.
 
+    """
+    def __init__(self, a: float, b: float, center: Vector2 = Vector2(0, 0), theta: float=0, buffer: float=0):
+        """
+        Initializes the Ellipse2D Object. 
         """
         if not isinstance(center, Vector2):
             raise TypeError("Expected an object of type euclid.Vector2 for arg center, but got " + type(center).__name__ + ".")
         self.center = center
         self.theta = theta
+        self.vel = Vector2()
         self.a = a + buffer
         self.b = b + buffer
         self.buffer = buffer
         self.BUFFER_FLAG = True
+
+    def __repr__(self):
+        return f"{type(self).__name__}(a = {self.a}, b = {self.b}, center = {self.center}, theta = {self.theta}, buffer = {self.buffer}, buffer_applied: {self.BUFFER_FLAG} )\n"
     
     def apply_buffer(self):
         if not self.BUFFER_FLAG:
@@ -163,7 +174,7 @@ class Ellipse2D(Obstacle2DBase):
         else:
             warnings.warn("Warning: Buffer already removed. Call Ignored.")
     
-    def evaluate(self, p):
+    def evaluate(self, p: Point2):
         """
         Evaluate the value of the ellipse at a given point.
         """
@@ -176,19 +187,19 @@ class Ellipse2D(Obstacle2DBase):
         eval = ( ( dx * ct + dy * st )/self.a )**2 + ( ( -dx * st + dy * ct )/self.b )**2 - 1
         return eval
 
-    def gradient(self, p):
+    def gradient(self, p: Point2):
         super().gradient(p)
         return matrix([self.dx(p), self.dy(p), self.dtheta(p)])
 
     # f = evaluate
         
-    def f(self, p):
+    def f(self, p: Point2):
         """
         Alias of the evaluate function, semantically significant for cvxopt.
         """
         return self.evaluate(p)
     
-    def dx(self, p):
+    def dx(self, p: Point2):
         super().dx(p)
         xd = p.x - self.center.x
         yd = p.y - self.center.y
@@ -198,7 +209,7 @@ class Ellipse2D(Obstacle2DBase):
         dx_ = (2 * ct/(self.a**2)) * ( xd * ct + yd * st ) + (-2 * st/(self.b**2)) * ( -xd * st + yd * ct )
         return dx_
     
-    def dy(self, p):
+    def dy(self, p: Point2):
         super().dy(p)
         xd = p.x - self.center.x
         yd = p.y - self.center.y
@@ -208,13 +219,13 @@ class Ellipse2D(Obstacle2DBase):
         dy_ = (2 * st/(self.a**2)) * ( xd * ct + yd * st ) + (2 * ct/(self.b**2)) * ( -xd * st + yd * ct )
         return dy_
 
-    def dv(self, p):
+    def dv(self, p: Point2):
         """
         Despite being zero. This function is still created for the sake of completeness w.r.t API.
         """
         return super().dy(p)
     
-    def update(self, a=None, b=None, center=None, theta=None, buffer=None):
+    def update(self, a: float=None, b: float=None, center: float=None, theta: float=None, buffer: float=None):
         if a is not None:
             self.a = a
         if b is not None:
@@ -233,14 +244,38 @@ class Ellipse2D(Obstacle2DBase):
             else:
                 self.buffer = buffer
     
-    def update_coords(self, xy):
+    def update_coords(self, xy: Point2):
         super().update_coords(xy)
         self.center = xy
+    
+    def update_state(self, xy: Point2, theta: float, v: Vector2):
+        self.update_coords(xy)
+        self.vel = v
+        self.theta = theta
+    
+    def update_velocity_by_magnitude(self, v: float):
+        """
+        Assumes that theta is the heading the calculates the vector.
+        """
+        self.vel = Vector2(x=v*np.cos(self.theta), y=v*np.sin(self.theta))
+        pass
 
-    def update_orientation(self, yaw):
+    def update_velocity(self, v: Vector2):
+        """
+        Sets the velocity using the Vector2 object. Note that this will
+        create a copy of the argument's object to avoid external mutation
+        of the attributes.
+        """
+        self.vel = v.copy()
+        pass
+
+    def update_orientation(self, yaw: float):
         self.theta = yaw
+        _v_mag = self.vel.magnitude()
+        self.update_velocity_by_magnitude(_v_mag)
+        pass
 
-    def update_by_bounding_box(self, bbox=BoundingBox()):
+    def update_by_bounding_box(self, bbox: BoundingBox):
         if not isinstance(bbox, BoundingBox):
             raise TypeError("Expected an object of type cbf.obstacles.BoundingBox as an input to fromBoundingBox() method, but got ", type(bbox).__name__)
             
@@ -250,14 +285,20 @@ class Ellipse2D(Obstacle2DBase):
         theta = bbox.rotation.yaw
         self.update(a=a, b=b, center=center, theta=theta)
 
-    def dtheta(self, p):
+    def dtheta(self, p: Point2):
         """
         Despite being zero. This function is still created for the sake of completeness w.r.t API.
         """
         return super().dtheta(p)
+    
+    def dt(self, p: Point2):
+        super().dt(p)
+        xd = p.x - self.center.x
+        yd = p.y - self.center.y
 
-    def __repr__(self):
-        return f"{type(self).__name__}(a = {self.a}, b = {self.b}, center = {self.center}, theta = {self.theta}, buffer = {self.buffer}, buffer_applied: {self.BUFFER_FLAG} )\n"
+        dt_ = -2 * ( (xd/self.a**2) * self.vel.x + (yd/self.b**2) * self.vel.y )
+        return dt_
+
     
     @classmethod
     def from_bounding_box(cls, bbox = BoundingBox(), buffer = 0.5) -> Ellipse2D:
@@ -368,6 +409,14 @@ class ObstacleList2D(MutableMapping):
             dv[idx] = obs.dv(p)
             idx = idx + 1
         return dv
+    
+    def dt(self, p: Point2) -> float:
+        dt = matrix(0.0, (len(self.mapping), 1))
+        idx = 0
+        for obs in self.mapping.values():
+            dt[idx] = obs.dt(p)
+            idx = idx + 1
+        return dt
 
     def gradient(self, p: Point2) -> float:
         df = matrix(0.0, (len(self.mapping), 3))
