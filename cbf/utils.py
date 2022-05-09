@@ -14,6 +14,7 @@ import os
 import numpy as np
 
 from euclid import *
+from cvxopt import matrix
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) +
                 "/../")
@@ -116,3 +117,6 @@ def saturation(x, x_min, x_max):
 def get_closest_idx(x, x_list):
     dx = [abs(x - ix) for ix in x_list]
     return np.argmin(dx)
+
+def vec_norm(x: matrix):
+    return np.sqrt(x.T * x)

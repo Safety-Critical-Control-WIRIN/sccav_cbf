@@ -16,21 +16,23 @@ author: Neelaksh Singh [https://www.github.com/TheGodOfWar007]
 import sys
 import os
 import warnings
+import matplotlib
 
 import numpy as np
 import euclid as geometry
 # Matplotlib
-import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import matplotlib.patches as patches
 import matplotlib.axes as axes
 
 matplotlib.use('Qt5Agg') # requires PyQt5 installed.
+
+from typing import TypeVar
+from cvxopt import solvers, matrix
+
 # Custom Imports
 import stanley_controller_ellipse as sce
-
-from cvxopt import solvers, matrix
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) +
                 "/../")
@@ -40,15 +42,24 @@ try:
 except:
     raise
 
+# Defining important TypeVars for type hinting.
+_NARRAY = TypeVar("_NARRAY", np.ndarray, matrix)
+
 # Global Variables used throughout the code.
 _OBSTACLE_COUNT = 1
 _OBSTACLE_SPAWN_INTERVAL = 10.0
 _ZERO_TOL = 1e-3
 _ANIMATION_FPS = 30.0
-_ANIMATION_RUNTIME = 60.0 # sec
+_ANIMATION_RUNTIME = 20.0 # sec
 _NUM_FRAMES = int(_ANIMATION_RUNTIME * _ANIMATION_FPS)
 _OBSTACLE_RADIUS_RANGE = geometry.Vector2(1.5, 2.0)
 _SPAWN_RADIUS_RANGE = geometry.Vector2(10.00, 20.00)
+
+# Controller/Vehicle associated global vars
+_L = 2.9  # [m] Wheel base of vehicle
+_lr = _L/2
+_lf = _L - _lr
+_max_steer = np.radians(30.0)  # [rad] max steering angle
 
 class RadialObstacleSpawner():
     """
@@ -77,6 +88,7 @@ class RadialObstacleSpawner():
         self.obstacle_list = ObstacleList2D()
         # + 1 for spawn annulus
         self.is_seeker = [False for ii in range(self.max_count + 1)]
+        self.is_spawned = self.is_seeker.copy()
         self.id_seekers = []
         self.id_spawned = []
         
@@ -129,6 +141,7 @@ class RadialObstacleSpawner():
         if self.id_head > self.max_count:
             warnings.warn("All obstacles spawned. id_head has reached the end. All further spawns are cancelled.")
             return False
+        
         obs_patch = self.patches[self.id_head]
         obs_patch.set_visible(True)
         
@@ -157,6 +170,7 @@ class RadialObstacleSpawner():
 
         self.is_seeker[self.id_head] = seeker
         self.id_spawned.append(self.id_head)
+        self.is_spawned[self.id_head] = True
 
         obs_yaw = np.arctan2(self.state.y - obs_y, self.state.x - obs_x)
 
@@ -176,7 +190,7 @@ class RadialObstacleSpawner():
         self.id_head += 1
         return True
 
-    def update_seekers(self, dt: float, v: geometry.Vector2=None, k: float=0.2):
+    def update_seekers(self, dt: float, v: geometry.Vector2=None, v_min: float = 3.0, k: float=0.2):
         """
         Will update the obstacle CBF objects and the corresponding patches
         for the animation and the dynamic obstacle CBF simulation. If `v` is
@@ -187,6 +201,7 @@ class RadialObstacleSpawner():
         
             dt (float): The update time step.
             v (euclid.Vector2, optional): Velocity of the seekers. Defaults to None.
+            v_min (float, optional): Min. velocity of the obstacle. Defaults to 3.0 m/s.
             k (float): Proportional law for the seeking law stated above. Defaults to 0.2.
         
         ### Returns:
@@ -205,6 +220,8 @@ class RadialObstacleSpawner():
             # Updating obstacle velocity (will use updated yaw)
             if v is None:
                 v_mag = k * np.hypot(self.state.x - center.x, self.state.y - center.y)
+                if v_mag < v_min:
+                    v_mag = v_min
                 obs_object.update_velocity_by_magnitude(v_mag)
             else:
                 obs_object.update_velocity(v)     
@@ -263,15 +280,38 @@ class RadialObstacleSpawner():
 
 # Declaring Matplotlib animation artists in the global scope
 # to not lose sight of the artist's pointer.
-_fig, _ax = plt.subplots()
+_fig = plt.figure()
+_gs = _fig.add_gridspec(4, 3)
+_ax = _fig.add_subplot(_gs[:3, :]) # Main animation axis
+_ax1 = _fig.add_subplot(_gs[3, 0]) # Distance b/w vehicle and obstacle
+_ax2 = _fig.add_subplot(_gs[3, 1]) # acceleration i/p
+_ax3 = _fig.add_subplot(_gs[3, 2]) # steering i/p
+
 _ax.set_xlim(left = -_SPAWN_RADIUS_RANGE.y, right = _SPAWN_RADIUS_RANGE.y)
 _ax.set_ylim(bottom = -_SPAWN_RADIUS_RANGE.y, top = _SPAWN_RADIUS_RANGE.y)
+_ax.set_xlabel("x (m)")
+_ax.set_ylabel("y (m)")
+_ax.set_title("Ego Vehicle and Obstacles in 2D Plane")
+
+_ax1.set_xlabel("t (sec)")
+_ax1.set_ylabel("dist(ego, obs) (m)")
+_ax1.set_title("Distance to collision")
+
+_ax2.set_xlabel("t (sec)")
+_ax2.set_ylabel("a (m/s^2)")
+_ax2.set_title("Acceleration cmd")
+
+_ax3.set_xlabel("t (sec)")
+_ax3.set_ylabel("delta (rad)")
+_ax3.set_title("Steering cmd")
+
+# _fig.tight_layout()
 
 _plot_objects = []
 
 # Defining the properties of the spawn annulus and the obstacle patch.
 _annulus_options = dict(
-    animated = False,
+    animated = True,
     fill = False,
     facecolor = None,
     edgecolor = 'k',
@@ -280,7 +320,7 @@ _annulus_options = dict(
 )
 
 _obs_patch_options = dict(
-    animated = False,
+    animated = True,
     fill = True,
     facecolor = 'r',
     edgecolor = 'b',
@@ -305,6 +345,17 @@ obstacle_spawner = RadialObstacleSpawner(
 # Ego Vehicle's marker
 _ego_marker = _ax.plot(_ego_state.x, _ego_state.y, "xg", label="Ego Vehicle")[0]
 
+## LOGGING AND PLOTTING ADDITIONAL DATA
+# Extra variables for logging important values.
+_t_arr = []
+_ego_obstacle_separation = []
+_a_cbf_list = []
+_delta_cbf_list = []
+
+_ego_obstacle_separation_plot = _ax1.plot([], [], linewidth=1.0, animated = True, color="g")[0]
+_a_cbf_plot = _ax2.plot([], [], linewidth=1.0, animated = True, color="k")[0]
+_delta_cbf_plot = _ax3.plot([], [], linewidth=1.0, animated = True, color="b", linestyle="--")[0]
+
 def init_animation():
     _plot_objects = [_ego_marker] + obstacle_spawner.patches
     obstacle_spawner.add_patches(_ax)
@@ -312,13 +363,71 @@ def init_animation():
     return _plot_objects
 
 ## Controller functions for modifying the vehicle control i/p(s).
-def single_obstacle_cbf1():
+def single_obstacle_CBF1(s: _NARRAY,
+                         u_ref: _NARRAY,
+                         c_obs: _NARRAY,
+                         c_obs_dot: _NARRAY,
+                         a: float, 
+                         b: float, 
+                         gamma: float,
+                         kv: float=1.0):
     
-    pass
+    m = 1 # No. of Constraints
+    n = 2 # Dimension of x0 i.e. u
+    u_ref = matrix(u_ref)
+    
+    # delta to beta
+    u_ref[1] = np.arctan2(_lr * np.tan(u_ref[1]), _lf + _lr)
+
+    def F(x=None, z=None):
+        if x is None: return m, matrix(0.0, (n, 1))
+        # if x is None: return m, u_des    
+        # for 1 objective function and 1 constraint and 3 state vars
+        f = matrix(0.0, (m+1, 1))
+        Df = matrix(0.0, (m+1, n))
+        f[0] = (x - u_ref).T * (x - u_ref)
+        # CBFs
+        # partials of h
+        h1 = ((s[0] - c_obs[0])/a)**2 + ((s[1] - c_obs[1])/b)**2 - 1 - (kv*s[3]/(1 + s[3]))
+        # h1 = ((s[0] - c_obs[0])/a)**2 + ((s[1] - c_obs[1])/b)**2 - 1 + (kv*s[3]/(1 + s[3]))
+        # h1 = ((s[0] - c_obs[0])/a)**2 + ((s[1] - c_obs[1])/b)**2 - 1 - (kv*s[3])
+        # h1 = ((s[0] - c_obs[0])/a)**2 + ((s[1] - c_obs[1])/b)**2 - 1 - (kv/(1 + s[3]))
+        # h1 = ((s[0] - c_obs[0])/a)**2 + ((s[1] - c_obs[1])/b)**2 - 1
+        h1_dx = 2*(s[0] - c_obs[0])/(a**2)
+        h1_dy = 2*(s[1] - c_obs[1])/(b**2)
+        h1_dtheta = 0.0
+        h1_dv = -kv/((1 + s[3])**2)
+        # h1_dv = kv/((1 + s[3])**2)
+        # h1_dv = -kv
+        # h1_dv = kv/((1 +s[3])**2)
+        # h1_dv = 0.0
+        # TV-CBF
+        h1_dt = -2 * ( ((s[0] - c_obs[0])/(a**2)) * c_obs_dot[0] + ((s[1] - c_obs[1])/(b**2)) * c_obs_dot[1] )
+        # temp vars are written as tn
+        Dh1 = matrix([h1_dx, h1_dy, h1_dtheta, h1_dv], (1, 4))
+        f_c = matrix([ s[3] * np.cos(s[2]), s[3] * np.sin(s[2]), 0, 0], (4, 1))
+        g_c = matrix([ [0, 0, 0, 1], [-s[3] * np.sin(s[2]), s[3] * np.cos(s[2]), s[3]/_lr, 0] ])
+
+        f[1] = -(Dh1 * (f_c + g_c * x) + gamma * h1 + h1_dt)
+
+        Df[0, :] = 2 * (x - u_ref).T
+        Df[1, :] = -1 * (Dh1 * g_c)
+
+        if z is None: return f, Df
+        H = z[0] * 2 * matrix(np.eye(n))
+        return f, Df, H
+    
+    solver_op = solvers.cp(F)
+    u = solver_op['x']
+    # beta to delta
+    u[1] = np.arctan2((_lf + _lr) * np.tan(u[1]), _lr)
+    
+    return u
 
 def animate(i):
     dt = 1/_ANIMATION_FPS
     t = i*dt
+    _t_arr.append(t)
     
     ###
         # This implements the spawn law. For now, lets just spawn one
@@ -328,9 +437,48 @@ def animate(i):
 
     ###
     
+    ### Control Code
+        # Something Happens to Ego Vehicle and Obstacles here   #
+        # Control i/p(s) are fed through CBF to the ego vehicle.#
+    # The u_ref 0, stationary ego vehicle case.
+    u_ref = np.array([0.0, 0.0])
+    # some vars for CBF
+    if obstacle_spawner.is_spawned[1]:
+        s = np.array([_ego_state.x, _ego_state.y, _ego_state.yaw, _ego_state.v])
+        obs1_center: geometry.Vector2 = obstacle_spawner.obstacle_list[1].center
+        obs1_vel: geometry.Vector2 = obstacle_spawner.obstacle_list[1].vel
+        c_obs = np.array([obs1_center.x, obs1_center.y])
+        c_obs_dot = np.array([obs1_vel.x, obs1_vel.y])
+        obs1_a = obstacle_spawner.obstacle_list[1].a
+        obs1_b = obs1_a
+        
+        # CBF
+        u_cbf = single_obstacle_CBF1(s = s, 
+                                    u_ref = u_ref,
+                                    c_obs = c_obs,
+                                    c_obs_dot = c_obs_dot,
+                                    a = obs1_a,
+                                    b = obs1_b,
+                                    gamma = 1.0,
+                                    kv = 1.0)
+        
+        _ego_obstacle_separation.append(np.hypot(_ego_state.x - obs1_center.x,
+                                                _ego_state.y - obs1_center.y))
+    else:
+        u_cbf = u_ref
+        _ego_obstacle_separation.append(0.0)
     ###
-        # Something Happens to Ego Vehicle and Obstacles here #
+    
+    
+    ### Updates to the states
         # Ego State object and obstacle patches are updated.  #
+        
+    # Updating ego state according to vehicle dynamics
+    acc_cbf = u_cbf[0]
+    delta_cbf = u_cbf[1]
+    _a_cbf_list.append(acc_cbf)
+    _delta_cbf_list.append(delta_cbf)
+    _ego_state.update_com(acc_cbf, delta_cbf, _dt = dt)
     
     # Updating ego state in obstacle spawner
     obstacle_spawner.update_state(_ego_state)
@@ -341,13 +489,26 @@ def animate(i):
     
     # Update Ego Marker
     _ego_marker.set_data([_ego_state.x], [_ego_state.y])
+    _ego_obstacle_separation_plot.set_data(_t_arr, _ego_obstacle_separation)
+    _a_cbf_plot.set_data(_t_arr, _a_cbf_list)
+    _delta_cbf_plot.set_data(_t_arr, _delta_cbf_list)
     
-    _plot_objects = [_ego_marker] + obstacle_spawner.patches
+    _ax1.set_xlim(left = 0, right = t)
+    _ax1.set_ylim(bottom = min(_ego_obstacle_separation), top = max(_ego_obstacle_separation))
+    
+    _ax2.set_xlim(left = 0, right = t)
+    _ax2.set_ylim(bottom = min(_a_cbf_list), top = max(_a_cbf_list))
+    
+    _ax3.set_xlim(left = 0, right = t)
+    _ax3.set_ylim(bottom = min(_delta_cbf_list), top = max(_delta_cbf_list))
+    
+    _plot_objects = [_ego_marker, _ego_obstacle_separation_plot, _a_cbf_plot, _delta_cbf_plot] + obstacle_spawner.patches
     
     return _plot_objects
 
 def main():
-    dt = int(1/_ANIMATION_FPS) # Has to be an integer for the interval param
+    # dt here is in ms and not in sec.
+    dt = int(1000/_ANIMATION_FPS) # Has to be an integer for the interval param
     
     # for stopping simulation with the esc key.
     plt.gcf().canvas.mpl_connect('key_release_event',
