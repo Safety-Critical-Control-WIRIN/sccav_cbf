@@ -30,7 +30,8 @@ class KBM_VC_CBF2D():
     """
     The Kinematic Bicycle Model - Velocity Controlled - Control Barrier Function.
 
-    Specs-
+    Details:
+    -------
     Supported Obstacle State: Static
     Supported Obstacle Type : Ellipse2D
     
@@ -110,11 +111,12 @@ class DBM_CBF_2DS():
     Uses the approx. dynamical model with small sideslip angle approximation valid
     only for lateral acceleration < 0.5*nu*g.
 
-    Specs-
-    Supported Obstacle State: Static
-    Supported Obstacle Type : Ellipse2D
+    Details:
+    -------
+    Supported Obstacle State : Static
+    Supported Obstacle Type  : Ellipse2D
     
-    Observed Safety Actions : Braking, Circumventing
+    Observed Safety Actions  : Braking, Circumventing
     
     Solver Used       : CVXOPT.solvers.cp
     Class K func used : alpha * h
@@ -186,7 +188,7 @@ class DBM_CBF_2DS():
             Lxg_h = Gh * g_c
             Lxf_h = Gh * f_c
 
-            f[1:] = -( Lxf_h + Lxg_h * x + ( self.__alpha * self.obstacle_list2d.f(self.__p) ) )
+            f[1:] = -( Lxf_h + Lxg_h * x + ( self.__alpha * self.obstacle_list2d.f(self.__p) )  + self.obstacle_list2d.dt)
             Df[1:, :] = -Lxg_h
 
             if z is None: return f, Df

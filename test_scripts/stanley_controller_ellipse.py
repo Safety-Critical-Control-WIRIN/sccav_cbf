@@ -10,7 +10,7 @@ Ref:
     - [Autonomous Automobile Path Tracking](https://www.ri.cmu.edu/pub_files/2009/2/Automatic_Steering_Methods_for_Autonomous_Automobile_Path_Tracking.pdf)
 
 modified by: Neelaksh Singh
-for: Safety Critical Control of Self Driving Cars
+for: Safety Critical Control of Autonomous Vehicles - WIRIN
 
 """
 import numpy as np
@@ -108,14 +108,15 @@ class State(object):
         self.yaw = normalize_angle(self.yaw)
         self.v = v_
     
-    def update_com(self, acceleration, delta):
+    def update_com(self, acceleration, delta, _dt: float = None):
         delta = np.clip(delta, -max_steer, max_steer)
         beta = np.arctan2(lr * np.tan(delta), lf + lr)
-        
-        self.x += (self.v * np.cos(self.yaw) - self.v * np.sin(self.yaw) * beta) * dt
-        self.y += (self.v * np.sin(self.yaw) + self.v * np.cos(self.yaw) * beta) * dt
-        self.yaw += (self.v * beta/lr) * dt
-        self.v += acceleration * dt
+        if _dt is None:
+            _dt = dt
+        self.x += (self.v * np.cos(self.yaw) - self.v * np.sin(self.yaw) * beta) * _dt
+        self.y += (self.v * np.sin(self.yaw) + self.v * np.cos(self.yaw) * beta) * _dt
+        self.yaw += (self.v * beta/lr) * _dt
+        self.v += acceleration * _dt
 
 
 
@@ -312,8 +313,92 @@ def saturation(x, x_min, x_max):
     else:
         return x
 
+def vec_norm(x: matrix):
+    return np.sqrt(x.T * x)
 
-# The accelerating obstacle case.
+def CBF_cone(s: np.array, 
+             s_obs: np.array, 
+             u_des: matrix, 
+             a: float, 
+             b: float,
+             cone_a: float,
+             alpha: float):
+    m = 1 # No. of Constraints
+    n = 2 # Dimension of x0 i.e. u
+    u_des = matrix(u_des)
+    s = matrix(s)
+    s_obs = matrix(s_obs)
+    cx = s_obs[0]
+    cy = s_obs[1]
+    
+    p_rel = s[:2] - s_obs[:2]
+    dist = vec_norm(p_rel)
+    s_vx = s[3]*np.cos(s[2])
+    s_obs_vx = s_obs[3]*np.cos(s_obs[2])
+    s_vy = s[3]*np.sin(s[2])
+    s_obs_vy = s_obs[3]*np.sin(s_obs[2])
+    v_rel = matrix([ s_vx - s_obs_vx, s_vy - s_obs_vy])
+
+    def F(x=None, z=None):
+        if x is None: return m, matrix(0.0, (n, 1))
+        # if x is None: return m, u_des    
+        # for 1 objective function and 1 constraint and 3 state vars
+        f = matrix(0.0, (m+1, 1))
+        Df = matrix(0.0, (m+1, n))
+        f[0] = (x - u_des).T * (x - u_des)
+        ### CBFs
+        ## Q func
+        q = p_rel.T * v_rel
+        q_dx = s_vx - s_obs_vx
+        q_dy = s_vy - s_obs_vy
+        q_dtheta = - (s[0] - cx) * s_vy + (s[1] - cy) * s_vx
+        q_dv = (s[0] - cx) * np.cos(s[2]) + (s[1] - cy) * np.sin(s[2])
+        q_dt = - (s_vx - s_obs_vx) * s_obs_vx - (s_vy - s_obs_vy) * s_obs_vy
+        ## / Q func
+        ## phi term
+        cone_boundary = np.sqrt(dist**2 - cone_a**2)
+        cos_phi = cone_boundary/dist
+        v_rel_norm = vec_norm(v_rel)
+        phi_term = dist * v_rel_norm * cos_phi
+        phi_term_dx = v_rel_norm * (s[0] - cx)/cone_boundary
+        phi_term_dy = v_rel_norm * (s[1] - cy)/cone_boundary
+        phi_term_dtheta = ( -(s_vx - s_obs_vx)*s_vy + (s_vy - s_obs_vy)*s_vx ) * cone_boundary/v_rel_norm
+        phi_term_dv = ( (s_vx - s_obs_vx)*np.cos(s[2]) + (s_vy - s_obs_vy)*np.sin(s[2]) ) * cone_boundary/v_rel_norm
+        phi_term_dt = -v_rel_norm * ( (s[0] - cx)*s_obs_vx + (s[1] - cy)*s_obs_vy )/cone_boundary
+        ## / phi term
+        ## h
+        h1 = q + phi_term
+        h1_dx = q_dx + phi_term_dx
+        h1_dy = q_dy + phi_term_dy
+        h1_dtheta = q_dtheta + phi_term_dtheta
+        h1_dv = q_dv + phi_term_dv
+        h1_dt = q_dt + phi_term_dt
+        # temp vars are written as tn
+        Dh1 = matrix([h1_dx, h1_dy, h1_dtheta, h1_dv], (1, 4))
+        f_c = matrix([ s[3] * np.cos(s[2]), s[3] * np.sin(s[2]), 0, 0], (4, 1))
+        g_c = matrix([ [0, 0, 0, 1], [-s[3] * np.sin(s[2]), s[3] * np.cos(s[2]), s[3]/lr, 0] ])
+
+        f[1] = -(Dh1 * (f_c + g_c * x) + alpha * h1 + h1_dt)
+
+        Df[0, :] = 2 * (x - u_des).T
+        Df[1, :] = -1 * (Dh1 * g_c)
+
+        if z is None: return f, Df
+        H = z[0] * 2 * matrix(np.eye(n))
+        return f, Df, H
+
+    # Enforcing linear constraints on control i/p
+    # a_max = 2.23 # m/s^2
+    # a_min = 0
+
+    # G = matrix([ [-1, 1],
+    #              [ 0, 0] ])
+    # h = matrix([ -a_min, a_max ])
+
+    # dims = {'l': 0, 'q': [], 's':  [3]}
+
+    # return solvers.cp(F, G=G, h=h, dims=dims)['x']
+    return solvers.cp(F)['x']
 
 
 def main():
@@ -352,7 +437,7 @@ def main():
     USE_CBF = True
     ZERO_TOL = 1e-3
     CBF_TYPE = 2 # 0: Ellipse, 1: Distance, 2: Ellipse - Acceleration Controlled
-                 # 3: Ellipse - API
+                 # 3: Ellipse - API, 4: Collision Cone
     a_max = 2.29 # m/s^2
     a_min = -2.29
     # params for animation
@@ -444,6 +529,9 @@ def main():
                 print("v: ", v_cbf, " delta: ", di_cbf)
                 print("old v: ", v_, " old delta: ", di)
                 print("f: ", cbf_controller.obstacle_list2d.f(p))
+            
+            if CBF_TYPE == 4:
+                s = np.array([state.x, state.y, state.yaw, state.v])
             
             print("time: ", time)
             
