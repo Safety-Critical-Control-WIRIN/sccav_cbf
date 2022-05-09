@@ -49,7 +49,7 @@ sys.path.append(os.path.dirname(os.path.abspath('')) +
 try:
     from cbf.cbf import KBM_VC_CBF2D, DBM_CBF_2DS
     from cbf.controllers import LateralStanley, PID1
-    from cbf.obstacles import Ellipse2D
+    from cbf.obstacles import Ellipse2D, CollisionCone2D, BoundingBox
 except:
     raise
 
@@ -83,6 +83,7 @@ class CodeOptions(enum.Enum):
     # CBF Options
     VELOCITY_CBF = 0
     ACCELERATION_CBF = 1
+    COLLISION_CONE_CBF = 2
     pass
 
 class CarlaSyncMode(object):
@@ -273,6 +274,13 @@ def main():
                                                       start_pose.location.y),
                                        start_pose.rotation.yaw,
                                        buffer=1.0)
+        
+        ## Create the Bounding Box object here ##
+        # of type cbf.obstacles.BoundingBox
+        bbox = BoundingBox()
+        ##
+        
+        obstacle_ccone2d = CollisionCone2D.from_bounding_box(bbox, buffer=0.5)
 
         """Defining the trajectory"""
         start_x = 5.3  # [m]
@@ -301,7 +309,7 @@ def main():
         obstacle_map = ObstacleMap(ego, world, trajectory, range=40)
         
         # The CBF Controller Object
-        CBF_MODE = CodeOptions.ACCELERATION_CBF
+        CBF_MODE = CodeOptions.COLLISION_CONE_CBF
         
         if CBF_MODE == CodeOptions.VELOCITY_CBF:
             gamma = 5.0
@@ -319,6 +327,17 @@ def main():
             cbf_controller = DBM_CBF_2DS()
             cbf_controller.set_model_params(lr=lr, lf=lf)
             cbf_controller.obstacle_list2d.update({0: obstacle_initial_ellipse2d})
+            
+        if CBF_MODE == CodeOptions.COLLISION_CONE_CBF:
+            lateral_stanley = LateralStanley(lr=lr, lf=lf, k=1.2, ks = 10)
+            lateral_stanley.set_trajectory(trajectory)
+
+            acc_pid = PID1(kp = 1.0, kd = 0.01, ki = 0.01)
+            # acc_pid = PID1(kp = 1.0)        
+            
+            cbf_controller = DBM_CBF_2DS()
+            cbf_controller.set_model_params(lr=lr, lf=lf)
+            cbf_controller.obstacle_list2d.update({0: obstacle_ccone2d})
 
         current_t = 0
         previous_t = 0
@@ -457,6 +476,108 @@ def main():
                     if len(cbf_controller.obstacle_list2d) < 1:
                         u = u_ref
                     else:
+                        u = cbf_controller.solve_cbf(u_ref)
+                        
+                    u_a_cbf = u[0]
+                    delta_cbf = u[1]
+                                            
+                    if u_a_cbf > 0:
+                        throttle = np.tanh(u_a_cbf)
+                        throttle = max(0.0, min(1.0, throttle)) # saturation
+                        if throttle - throttle_previous > 0.1:
+                            throttle = throttle_previous + 0.1 # constraining throttle increase rate
+                    else:
+                        throttle = 0
+                        brake = -np.tanh(u_a_cbf)
+                        brake = max(0.0, min(1.0, brake)) # saturation
+                        if brake - brake_previous > 0.1:
+                            brake = brake_previous + 0.1 # constraining throttle increase rate
+
+                    throttle_previous =  throttle
+                    brake_previous = brake
+                    
+                    if delta_cbf > 0:
+                        delta_cbf = max(0.0, min(delta_cbf, max_steer))
+                    else:
+                        delta_cbf = max(-max_steer, min(delta_cbf, 0.0))
+                        
+                    cmd_control.throttle = throttle
+                    cmd_control.steer = delta_cbf
+                    cmd_control.brake = brake
+                    cmd_control.manual_gear_shift = False
+                    
+                    vehicle.apply_control(cmd_control)
+
+                if CBF_MODE == CodeOptions.COLLISION_CONE_CBF:
+                    
+                    # State and Obstacle List Update
+                    # cbf_controller.obstacle_list2d.update_by_bounding_box(bbox_dict=obstacles_list)
+                    # Updating ego state (global coords) in CBF
+                    p = euclid.Vector2(ego.get_transform().location.x, ego.get_transform().location.y)
+                        
+                    # Lateral Stanley
+
+                    ego_v = obstacle_map.ego_v
+                    ego_v = np.sqrt(ego_v.x**2 + ego_v.y**2 + ego_v.z**2)
+                    
+                    cbf_controller.update_state(p=p, v=ego_v, theta=obstacle_map.ego_yaw * np.pi / 180)
+                    u_ref = np.array([0.0, 0.0])
+                    
+                    front_axle_center = euclid.Vector2((fl_wheel.position.x + fr_wheel.position.x)/2, (fl_wheel.position.y + fr_wheel.position.y)/2)/100
+                    
+                    bbox_front_center = euclid.Vector2(obstacle_map.ego_x + obstacle_map.ego_width*np.cos(obstacle_map.ego_yaw)/2,\
+                        obstacle_map.ego_y + obstacle_map.ego_height*np.sin(obstacle_map.ego_yaw)/2)
+                    ### LATERAL STANLEY ###
+                    lateral_stanley.update_state(obstacle_map.ego_x, obstacle_map.ego_y,\
+                        obstacle_map.ego_yaw * np.pi / 180, ego_v)
+
+                    # delta, target_idx = lateral_stanley.control(front_coords=front_axle_center)
+                    # delta, target_idx = lateral_stanley.control(front_coords=bbox_front_center)
+                    delta, target_idx = lateral_stanley.control(initial_yaw=-np.pi)
+                    # max_steer = steer_curve_steer[get_closest_idx(ego_v, steer_curve_v)]
+                    max_steer = 1
+                    delta = delta * convert_rad_to_steer
+                    u_ref[1] = delta
+                    
+                    # if delta > 0:
+                    #     delta = max(0.0, min(delta, max_steer))
+                    #     if delta - delta_previous > 0.1:
+                    #         delta = delta_previous + 0.1
+                    # else:
+                    #     delta = max(-max_steer, min(delta, 0.0))
+                    #     if abs(delta - delta_previous) > 0.1:
+                    #         delta = delta_previous - 0.1
+                    # delta_previous = delta
+                    
+            
+                    #######################
+
+                    ### ACC PID ###
+                    max_acc = 20
+                    # acc_pid.set_dt(snapshot.timestamp.delta_seconds)
+                    acc_pid.set_dt(current_t - previous_t)
+                    previous_t = current_t
+                    current_ref = trajectory[target_idx]
+                    
+                    # u_a is the acceleration equivalent o/p of PID
+                    u_a = acc_pid.control(ego_v, current_ref[3])
+                    u_ref[0] = u_a
+                    ###############
+                    
+                    # Solving the CBF's QP
+                    if len(cbf_controller.obstacle_list2d) < 1:
+                        u = u_ref
+                    else:
+                        ## fill s and s_obs here ##
+                        # s     -> ego state [ego.x, ego.y, ego.yaw, ego.v]
+                        # s_obs -> obs state [obs.x, obs.y, obs.yaw, obs.v]
+                        s = np.array([0.0, 0.0, 0.0, 0.0])
+                        s_obs = np.array([0.0, 0.0, 0.0, 0.0])
+                        ##
+                        
+                        for obstacle in cbf_controller.obstacle_list2d:
+                            obstacle.update(s = s, s_obs = s_obs)
+                        
                         u = cbf_controller.solve_cbf(u_ref)
                         
                     u_a_cbf = u[0]
