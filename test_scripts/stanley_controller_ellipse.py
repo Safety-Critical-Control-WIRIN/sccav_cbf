@@ -13,6 +13,7 @@ modified by: Neelaksh Singh
 for: Safety Critical Control of Autonomous Vehicles - WIRIN
 
 """
+
 import numpy as np
 import matplotlib.pyplot as plt
 # import matplotlib.animation as animation
@@ -34,7 +35,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)) +
 
 try:
     import cubic_spline_planner
-    from cbf.obstacles import Ellipse2D
+    from cbf.obstacles import Ellipse2D, CollisionCone2D
     from cbf.cbf import KBM_VC_CBF2D, DBM_CBF_2DS
 except:
     raise
@@ -50,6 +51,8 @@ max_steer = np.radians(30.0)  # [rad] max steering angle
 
 show_animation = True
 
+ZERO_TOL = 1e-3
+RAD_TO_DEG = 180/np.pi
 
 class State(object):
     """
@@ -314,13 +317,11 @@ def saturation(x, x_min, x_max):
         return x
 
 def vec_norm(x: matrix):
-    return np.sqrt(x.T * x)
+    return sqrt(x.T * x)[0]
 
 def CBF_cone(s: np.array, 
              s_obs: np.array, 
              u_des: matrix, 
-             a: float, 
-             b: float,
              cone_a: float,
              alpha: float):
     m = 1 # No. of Constraints
@@ -362,8 +363,11 @@ def CBF_cone(s: np.array,
         phi_term = dist * v_rel_norm * cos_phi
         phi_term_dx = v_rel_norm * (s[0] - cx)/cone_boundary
         phi_term_dy = v_rel_norm * (s[1] - cy)/cone_boundary
-        phi_term_dtheta = ( -(s_vx - s_obs_vx)*s_vy + (s_vy - s_obs_vy)*s_vx ) * cone_boundary/v_rel_norm
-        phi_term_dv = ( (s_vx - s_obs_vx)*np.cos(s[2]) + (s_vy - s_obs_vy)*np.sin(s[2]) ) * cone_boundary/v_rel_norm
+        phi_term_dtheta = 0.0
+        phi_term_dv = 0.0
+        if v_rel_norm > ZERO_TOL:
+            phi_term_dtheta = ( -(s_vx - s_obs_vx)*s_vy + (s_vy - s_obs_vy)*s_vx ) * cone_boundary/v_rel_norm
+            phi_term_dv = ( (s_vx - s_obs_vx)*np.cos(s[2]) + (s_vy - s_obs_vy)*np.sin(s[2]) ) * cone_boundary/v_rel_norm
         phi_term_dt = -v_rel_norm * ( (s[0] - cx)*s_obs_vx + (s[1] - cy)*s_obs_vy )/cone_boundary
         ## / phi term
         ## h
@@ -415,7 +419,7 @@ def main():
     max_simulation_time = 30
 
     # Initial state
-    state = State(x=-0.0, y=5.0, yaw=np.radians(20.0), v=0.0)
+    state = State(x=-0.0, y=5.0, yaw=np.radians(20.0), v=10.0)
 
     last_idx = len(cx) - 1
     time = 0.0
@@ -429,14 +433,14 @@ def main():
     # Elliptical Obstacle on Track
     a = 20
     b = 10
-    obs_idx = int(last_idx*0.50) # Obstacle on 75% of the trajectory
+    obs_idx = int(last_idx*0.75) # Obstacle on 75% of the trajectory
     o_cx = cx[obs_idx]
     o_cy = cy[obs_idx]
 
     # FLAGS and IMP. CONSTANTS
     USE_CBF = True
     ZERO_TOL = 1e-3
-    CBF_TYPE = 2 # 0: Ellipse, 1: Distance, 2: Ellipse - Acceleration Controlled
+    CBF_TYPE = 4 # 0: Ellipse, 1: Distance, 2: Ellipse - Acceleration Controlled
                  # 3: Ellipse - API, 4: Collision Cone
     a_max = 2.29 # m/s^2
     a_min = -2.29
@@ -459,6 +463,7 @@ def main():
             
             Dbuffer = 1
             Ds = max(a, b)/2 + Dbuffer
+            a_cone = np.hypot(a, b)/2
             if CBF_TYPE == 0:
                 u_des = np.array([v_, v_ * np.tan(di)/L])
                 s = np.array([ state.x, state.y, state.yaw ])
@@ -531,7 +536,37 @@ def main():
                 print("f: ", cbf_controller.obstacle_list2d.f(p))
             
             if CBF_TYPE == 4:
-                s = np.array([state.x, state.y, state.yaw, state.v])
+                a_ = pid_control(target_speed, state.v)
+                
+                ## Without Class ##
+                # beta_ = np.arctan2(lr * np.tan(di), lf + lr)
+                # u_des = np.array([a_, beta_])
+                s = np.array([ state.x, state.y, state.yaw, state.v ])
+                s_obs = np.array([ o_cx, o_cy, 0, 0 ])
+                # u = CBF_cone(s, s_obs, u_des, a_cone, alpha=gamma)
+                # # a_cbf = saturation(u[0], a_min, a_max)
+                # a_cbf = u[0]
+                # beta_cbf = u[1]
+                # di_cbf = np.arctan2((lf + lr)*np.tan(beta_cbf), lr)
+                # delta_cbf[i] = di_cbf
+                
+                ## With Class ##
+                cbf_controller = DBM_CBF_2DS(alpha=gamma)
+                cbf_controller.set_model_params(lr=lr, lf=lf)
+                cbf_controller.obstacle_list2d.update({
+                    0: CollisionCone2D(a_cone, s, s_obs)
+                })
+                p=Vector2(state.x, state.y)
+                cbf_controller.update_state(p, state.v, state.yaw)
+                cbf_controller.set_qp_cost_weight(np.diag([0.5, 0.5]))
+                u = cbf_controller.solve_cbf(np.array([a_, di]))
+                a_cbf = u[0]
+                di_cbf = u[1]
+                delta_cbf[i] = di_cbf
+                
+                state.update_com(a_cbf, di_cbf)
+                print(" a: ", a_cbf, " delta: ", di_cbf)
+                print(" v: ", v_, " old a: ", a_, " old delta: ", di)
             
             print("time: ", time)
             
@@ -598,7 +633,7 @@ def main():
                     cbf_active = True
                     plt.text(0, 25, "CBF Status: Triggered")
 
-            if CBF_TYPE == 2:
+            if CBF_TYPE in [2, 4]:
                 if(abs(a_cbf) > ZERO_TOL):
                     plt.text(0, 30, "CBF a[m/s]:" + str(a_cbf)[:4])
                 else:
@@ -609,8 +644,10 @@ def main():
                 else:
                     plt.text(75, 30, "PID a[m/s]: 0")
 
-                if USE_CBF:
+                if USE_CBF and (CBF_TYPE == 2):
                     plt.text(75, 25, "CBF Type: Ellipse|A")
+                if USE_CBF and (CBF_TYPE == 4):
+                    plt.text(75, 25, "CBF Type: Cone|A")
 
                 trig_flag_a = abs(a_cbf - a_) >= ZERO_TOL
                 trig_flag_d = abs(di_cbf - di) >= ZERO_TOL
@@ -628,10 +665,50 @@ def main():
             ax = plt.gca()
             obs_ellipse = patches.Ellipse(xy=(o_cx, o_cy), width=a, height=b, ec='b', fc=(0,1,0,0.5), lw=2, ls='-.')
             obs_dist_circle = patches.Circle(xy=(o_cx, o_cy), radius=Ds, ls='--', lw=2, ec='k', fc=(0,1,0,0))
+            dist = np.hypot(state.x - o_cx, state.y - o_cy)
+            
+            if (dist > ZERO_TOL) and ((dist**2 - a_cone**2) > 0):
+                phi = np.arccos(np.sqrt(dist**2 - a_cone**2)/dist)
+            else:
+                phi = np.pi/2
+            
+            # phi = np.arccos(np.sqrt(dist**2 - a_cone**2)/dist)
+                
+            alpha = np.pi + np.arctan2(state.y - o_cy, state.x - o_cx)
+            t1 = (alpha + phi)*RAD_TO_DEG
+            t2 = (alpha - phi)*RAD_TO_DEG
+            if t1 < t2:
+                theta1 = t1
+                theta2 = t2
+            else:
+                theta1 = t2
+                theta2 = t1
+            collision_cone = patches.Wedge(center = (state.x, state.y), 
+                                           r = dist,
+                                           theta1 = theta1,
+                                           theta2 = theta2,
+                                           linestyle='-.',
+                                           linewidth=1.5,
+                                           fill = True,
+                                           facecolor = 'pink',
+                                           alpha = 0.3,
+                                           edgecolor = 'pink')
             ax.add_patch(obs_ellipse)
             ax.add_patch(obs_dist_circle)
+            ax.add_patch(collision_cone)
+            
+            # Adding the velocity vector
+            # plt.quiver([state.x], 
+            #            [state.y], 
+            #            [state.v * np.cos(state.yaw)],
+            #            [state.v * np.sin(state.yaw)],
+            #            width = 0.005,
+            #            scale_units='xy',
+            #            scale = 1,
+            #            zorder=10)
+            
             # im = plt.imshow(animated=True)
-            # ims.append([im])
+            # ims.append([im])            
             plt.pause(0.001)
             fname = os.getcwd() + "\\temp\\ts1_{0}.png".format(i)
             i = i + 1
