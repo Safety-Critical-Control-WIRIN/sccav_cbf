@@ -14,7 +14,7 @@ import os
 import numpy as np
 
 from euclid import *
-from cvxopt import matrix
+from cvxopt import matrix, sqrt
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) +
                 "/../")
@@ -119,4 +119,4 @@ def get_closest_idx(x, x_list):
     return np.argmin(dx)
 
 def vec_norm(x: matrix):
-    return np.sqrt(x.T * x)
+    return sqrt(x.T * x)[0]

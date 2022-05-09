@@ -48,6 +48,7 @@ class Obstacle2DTypes(enum.Enum):
     Enumerations for the available 2D obstacle classes.
     """
     ELLIPSE2D = 0
+    COLLISION_CONE2D = 1
 
 class BoundingBox():
     def __init__(self, extent=Vector3(), location=Vector3(), rotation=Rotation(), velocity:float = 0.0):
@@ -344,7 +345,9 @@ class CollisionCone2D(Obstacle2DBase):
         self.v_rel = matrix([ self.s_vx - self.s_obs_vx, self.s_vy - self.s_obs_vy])
         self.dist = vec_norm(self.p_rel)
         self.v_rel_norm = vec_norm(self.v_rel)
-        self.cone_boundary = np.sqrt(self.dist**2 - self.a**2)
+        self.cone_boundary = 0
+        if (self.dist - self.a) >= 0:
+            self.cone_boundary = np.sqrt(self.dist**2 - self.a**2)
         self.cos_phi = self.cone_boundary/self.dist
         
     def __repr__(self):
@@ -536,6 +539,8 @@ class ObstacleList2D(MutableMapping):
                 else:
                     if obs_type == Obstacle2DTypes.ELLIPSE2D:
                         self.__setitem__(key, Ellipse2D.from_bounding_box(bbox, buffer))
+                    if obs_type == Obstacle2DTypes.COLLISION_CONE2D:
+                        self.__setitem__(key, CollisionCone2D.from_bounding_box(bbox, buffer))
             
             rm_keys = []
             for key in self.mapping.keys():

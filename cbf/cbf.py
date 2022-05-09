@@ -188,7 +188,7 @@ class DBM_CBF_2DS():
             Lxg_h = Gh * g_c
             Lxf_h = Gh * f_c
 
-            f[1:] = -( Lxf_h + Lxg_h * x + ( self.__alpha * self.obstacle_list2d.f(self.__p) )  + self.obstacle_list2d.dt)
+            f[1:] = -( Lxf_h + Lxg_h * x + ( self.__alpha * self.obstacle_list2d.f(self.__p) )  + self.obstacle_list2d.dt(self.__p))
             Df[1:, :] = -Lxg_h
 
             if z is None: return f, Df
