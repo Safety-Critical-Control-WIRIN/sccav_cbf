@@ -31,7 +31,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)) +
 
 try:
     from cbf.geometry import Rotation, Transform
-    from cbf.utils import Timer
+    from cbf.utils import Timer, ZERO_TOL
 except:
     raise
 
@@ -346,9 +346,14 @@ class CollisionCone2D(Obstacle2DBase):
         self.dist = vec_norm(self.p_rel)
         self.v_rel_norm = vec_norm(self.v_rel)
         self.cone_boundary = 0
+        
         if (self.dist - self.a) >= 0:
             self.cone_boundary = np.sqrt(self.dist**2 - self.a**2)
-        self.cos_phi = self.cone_boundary/self.dist
+        
+        if self.dist > ZERO_TOL:
+            self.cos_phi = self.cone_boundary/self.dist
+        else:
+            self.cos_phi = np.pi/2
         
     def __repr__(self):
         return f"{type(self).__name__}(a = {self.a}, b = {self.b}, center = {self.center}, theta = {self.theta}, buffer = {self.buffer}, buffer_applied: {self.BUFFER_FLAG} )\n"
@@ -449,7 +454,10 @@ class CollisionCone2D(Obstacle2DBase):
         self.dist = vec_norm(self.p_rel)
         self.v_rel_norm = vec_norm(self.v_rel)
         self.cone_boundary = np.sqrt(self.dist**2 - self.a**2)
-        self.cos_phi = self.cone_boundary/self.dist
+        if self.dist > ZERO_TOL:
+            self.cos_phi = self.cone_boundary/self.dist
+        else:
+            self.cos_phi = np.pi/2
     
     def update_state(self, s: matrix, s_obs: matrix):
         self.update(s=s, s_obs=s_obs)
@@ -481,13 +489,13 @@ class CollisionCone2D(Obstacle2DBase):
         self.update(s_obs=s_obs)
     
     @classmethod
-    def from_bounding_box(cls, bbox = BoundingBox(), buffer = 0.5) -> CollisionCone2D:
+    def from_bounding_box(cls, s: matrix = None, bbox = BoundingBox(), buffer = 0.5) -> CollisionCone2D:
         if not isinstance(bbox, BoundingBox):
             raise TypeError("Expected an object of type cbf.obstacles.BoundingBox as an input to fromBoundingBox() method, but got ", type(bbox).__name__)
         
         a = np.hypot(bbox.extent.x, bbox.extent.y)
         s_obs = matrix([bbox.location.x, bbox.location.y, 0.0, bbox.velocity])
-        return cls(a=a, s_obs=s_obs, buffer=buffer)
+        return cls(a=a, s=s, s_obs=s_obs, buffer=buffer)
         
 class ObstacleList2D(MutableMapping):
 

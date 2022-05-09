@@ -24,6 +24,8 @@ try:
 except:
     raise
 
+ZERO_TOL = 1e-3
+
 class TimerError(Exception):
     """ Custom Exception for Timer related errors. """
     pass
