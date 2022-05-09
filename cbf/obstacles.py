@@ -489,7 +489,7 @@ class CollisionCone2D(Obstacle2DBase):
         self.update(s_obs=s_obs)
     
     @classmethod
-    def from_bounding_box(cls, s: matrix = None, bbox = BoundingBox(), buffer = 0.5) -> CollisionCone2D:
+    def from_bounding_box(cls, s: matrix = matrix(0.0, (4,1)), bbox = BoundingBox(), buffer = 0.5) -> CollisionCone2D:
         if not isinstance(bbox, BoundingBox):
             raise TypeError("Expected an object of type cbf.obstacles.BoundingBox as an input to fromBoundingBox() method, but got ", type(bbox).__name__)
         
