@@ -26,7 +26,8 @@ import matplotlib.pyplot as plt
 
 from matplotlib.patches import Rectangle, Ellipse
 from matplotlib.transforms import Affine2D
-from cvxopt import solvers
+from cvxopt import solvers, matrix
+
 from euclid import *
 
 try:
@@ -60,6 +61,7 @@ except:
 IMG_WIDTH = 1280
 IMG_HEIGHT = 720
 DEGREE_TO_RADIANS = math.pi/180
+CASE = 9
 
 # Suppressing the cvxopt solver output
 solvers.options['show_progress'] = False
@@ -188,10 +190,10 @@ def main():
     try:
         m = world.get_map()
         start_pose = random.choice(m.get_spawn_points())
-        start_pose.location.x = -40.1
-        start_pose.location.y = 99.5
+        start_pose.location.x = 102.6
+        start_pose.location.y = -30
         start_pose.location.z = 0.1
-        start_pose.rotation.yaw = -90
+        start_pose.rotation.yaw = 90
 
         blueprint_library = world.get_blueprint_library()
 
@@ -207,10 +209,10 @@ def main():
         vehicle_com = vehicle_physics.center_of_mass
         fl_wheel = vehicle_physics.wheels[0]
         fr_wheel = vehicle_physics.wheels[1]
-        
+
         bl_wheel = vehicle_physics.wheels[2]
         bl_to_fl = fl_wheel.position - bl_wheel.position
-        
+
         front_axle_center = euclid.Vector2((fl_wheel.position.x + fr_wheel.position.x)/2, (fl_wheel.position.y + fr_wheel.position.y)/2)/100
 
         lf = np.hypot(front_axle_center.x - start_pose.location.x, front_axle_center.y - start_pose.location.y)
@@ -224,7 +226,7 @@ def main():
         # we will take an avg of the max of FL and FR wheels.
         max_steer_angle = (fl_wheel.max_steer_angle + fr_wheel.max_steer_angle)/2
         convert_rad_to_steer = 180.0 / max_steer_angle / np.pi
-        
+
         if CodeOptions.PRINT_PHYSICS_PROPERTIES:
             print("L: ", np.sqrt(bl_to_fl.x**2 + bl_to_fl.y**2 + bl_to_fl.z**2)/100)
             print(f"lf: {lf}")
@@ -237,17 +239,17 @@ def main():
 
         ### FOR INSTANT START OF VEHICLE ###
         # ref: https://github.com/carla-simulator/carla/issues/1640
-        
+
         cmd_control = carla.VehicleControl()
-        
+
         if CodeOptions.INSTANTLY_START_EGO_ENGINE:
             cmd_control = carla.VehicleControl(manual_gear_shift=True, gear=1)
             vehicle.apply_control(cmd_control)
-            
+
         if CodeOptions.PRINT_EGO_TIRE_FRICTION:
             for i in range(4):
                 print(vehicle_physics.wheels[i].tire_friction)
-                
+
         if CodeOptions.PRINT_TORQUE_CURVE:
             for i in range(len(vehicle_physics.torque_curve)):
                 print(vehicle_physics.torque_curve[i].x)
@@ -262,91 +264,372 @@ def main():
             attach_to=vehicle)
         actor_list.append(camera_rgb)
 
-        start_pose.location.x = -40.1
-        start_pose.location.y = 40.5
-        start_pose.rotation.yaw = -90
-        obstacle = world.spawn_actor(
-            random.choice(blueprint_library.filter('vehicle.audi.etron')),
-            start_pose)
-        # obstacle.set_velocity(carla.Vector3D(0, 5, 0))
-        actor_list.append(obstacle)
-        
-        obstacle_initial_ellipse2d = Ellipse2D(obstacle.bounding_box.extent.x,
-                                       obstacle.bounding_box.extent.y,
-                                       euclid.Vector2(start_pose.location.x,
-                                                      start_pose.location.y),
-                                       start_pose.rotation.yaw,
-                                       buffer=1.0)
-        
-        ## Create the Bounding Box object here ##
+
+        """Specifying the scenario"""
+        map_range = 40
+        if CASE == 1:
+            start_pose.location.x = 101.6
+            start_pose.location.y = 30
+            start_pose.rotation.yaw = 0
+            obstacle1 = world.spawn_actor(
+                random.choice(blueprint_library.filter('vehicle.audi.etron')),
+                start_pose)
+            # obstacle.set_velocity(carla.Vector3D(0, 5, 0))
+            actor_list.append(obstacle1)
+
+            """Defining the trajectory"""
+            start_x = 102.6  # [m]
+            start_y = 87.5  # [m]
+            start_yaw = np.radians(90)  # [rad]
+
+            end_x = 62.4  # [m]
+            end_y = 134.0  # [m]
+            end_yaw = np.radians(180)  # [rad]
+            offset = 3.0
+            resolution = 100
+            velocity = 10
+
+            # bezier = Bezier(start_x, start_y, start_yaw, end_x, end_y, end_yaw, offset, resolution=100)
+            # curve = bezier.get_trajectory(velocity=velocity)
+
+            straight1 = []
+            for t in np.linspace(-30, 100, resolution):
+                straight1.append((102.6, t, math.pi / 2, velocity))
+
+            # straight2 = []
+            # for t in np.linspace(62.4, 12.0, resolution):
+            #     straight2.append((t, 134.0, 0, velocity))
+
+            trajectory = straight1
+
+        elif CASE == 2:
+            start_pose.location.x = 99.6
+            start_pose.location.y = 50
+            start_pose.rotation.yaw = 90
+            obstacle1 = world.spawn_actor(
+                random.choice(blueprint_library.filter('vehicle.audi.etron')),
+                start_pose)
+            # obstacle.set_velocity(carla.Vector3D(0, 5, 0))
+            actor_list.append(obstacle1)
+
+            start_pose.location.x = 103.6
+            start_pose.location.y = 30
+            start_pose.rotation.yaw = 90
+            obstacle2 = world.spawn_actor(
+                random.choice(blueprint_library.filter('vehicle.audi.etron')),
+                start_pose)
+            # obstacle.set_velocity(carla.Vector3D(0, 5, 0))
+            actor_list.append(obstacle2)
+
+            """Defining the trajectory"""
+            resolution = 100
+            velocity = 10
+
+            straight1 = []
+            for t in np.linspace(-30, 100, resolution):
+                straight1.append((102.6, t, math.pi / 2, velocity))
+
+            trajectory = straight1
+
+        elif CASE == 3:
+            start_pose.location.x = 101.1
+            start_pose.location.y = 50
+            start_pose.rotation.yaw = 90
+            obstacle1 = world.spawn_actor(
+                random.choice(blueprint_library.filter('vehicle.audi.etron')),
+                start_pose)
+            # obstacle.set_velocity(carla.Vector3D(0, 5, 0))
+            actor_list.append(obstacle1)
+
+            start_pose.location.x = 105.1
+            start_pose.location.y = 50
+            start_pose.rotation.yaw = 90
+            obstacle2 = world.spawn_actor(
+                random.choice(blueprint_library.filter('vehicle.audi.etron')),
+                start_pose)
+            # obstacle.set_velocity(carla.Vector3D(0, 5, 0))
+            actor_list.append(obstacle2)
+
+            """Defining the trajectory"""
+            resolution = 100
+            velocity = 10
+
+            straight1 = []
+            for t in np.linspace(-30, 100, resolution):
+                straight1.append((102.6, t, math.pi / 2, velocity))
+
+            trajectory = straight1
+
+        elif CASE == 4:
+            start_pose.location.x = 101.1
+            start_pose.location.y = 50
+            start_pose.rotation.yaw = 90
+            obstacle1 = world.spawn_actor(
+                random.choice(blueprint_library.filter('vehicle.audi.etron')),
+                start_pose)
+            # obstacle.set_velocity(carla.Vector3D(0, 5, 0))
+            actor_list.append(obstacle1)
+
+            start_pose.location.x = 104.1
+            start_pose.location.y = 50
+            start_pose.rotation.yaw = 90
+            obstacle2 = world.spawn_actor(
+                random.choice(blueprint_library.filter('vehicle.audi.etron')),
+                start_pose)
+            # obstacle.set_velocity(carla.Vector3D(0, 5, 0))
+            actor_list.append(obstacle2)
+
+            start_pose.location.x = 103
+            start_pose.location.y = 30
+            start_pose.rotation.yaw = 0
+            obstacle3 = world.spawn_actor(
+                random.choice(blueprint_library.filter('vehicle.audi.etron')),
+                start_pose)
+            # obstacle.set_velocity(carla.Vector3D(0, 5, 0))
+            actor_list.append(obstacle3)
+
+            """Defining the trajectory"""
+            resolution = 100
+            velocity = 10
+
+            straight1 = []
+            for t in np.linspace(-30, 100, resolution):
+                straight1.append((102.6, t, math.pi / 2, velocity))
+
+            trajectory = straight1
+
+        elif CASE == 5:
+            start_pose.location.x = 102.6
+            start_pose.location.y = 60
+            start_pose.rotation.yaw = -90
+            obstacle1 = world.spawn_actor(
+                random.choice(blueprint_library.filter('vehicle.audi.etron')),
+                start_pose)
+            obstacle1.set_target_velocity(carla.Vector3D(0, -10, 0))
+            actor_list.append(obstacle1)
+
+            """Defining the trajectory"""
+            resolution = 100
+            velocity = 10
+
+            straight1 = []
+            for t in np.linspace(-30, 100, resolution):
+                straight1.append((102.6, t, math.pi / 2, velocity))
+
+            trajectory = straight1
+
+        elif CASE == 6:
+            map_range = 30
+            start_pose.location.x = 101.1
+            start_pose.location.y = 10
+            start_pose.rotation.yaw = 90
+            obstacle1 = world.spawn_actor(
+                random.choice(blueprint_library.filter('vehicle.audi.etron')),
+                start_pose)
+            obstacle1.set_target_velocity(carla.Vector3D(0, 5, 0))
+            actor_list.append(obstacle1)
+
+            start_pose.location.x = 103.1
+            start_pose.location.y = 20
+            start_pose.rotation.yaw = 90
+            obstacle2 = world.spawn_actor(
+                random.choice(blueprint_library.filter('vehicle.audi.etron')),
+                start_pose)
+            obstacle2.set_target_velocity(carla.Vector3D(0, 5, 0))
+            actor_list.append(obstacle2)
+
+            """Defining the trajectory"""
+            resolution = 100
+            velocity = 15
+
+            straight1 = []
+            for t in np.linspace(-30, 100, resolution):
+                straight1.append((102.6, t, math.pi / 2, velocity))
+
+            trajectory = straight1
+
+        elif CASE == 7:
+            map_range = 50
+            start_pose.location.x = 101.1
+            start_pose.location.y = 60
+            start_pose.rotation.yaw = 90
+            obstacle1 = world.spawn_actor(
+                random.choice(blueprint_library.filter('vehicle.audi.etron')),
+                start_pose)
+            obstacle1.set_target_velocity(carla.Vector3D(0, 5, 0))
+            actor_list.append(obstacle1)
+
+            start_pose.location.x = 104.1
+            start_pose.location.y = 50
+            start_pose.rotation.yaw = 90
+            obstacle2 = world.spawn_actor(
+                random.choice(blueprint_library.filter('vehicle.audi.etron')),
+                start_pose)
+            obstacle2.set_target_velocity(carla.Vector3D(0, 5, 0))
+            actor_list.append(obstacle2)
+
+            start_pose.location.x = 107.1
+            start_pose.location.y = 40
+            start_pose.rotation.yaw = 90
+            obstacle3 = world.spawn_actor(
+                random.choice(blueprint_library.filter('vehicle.audi.etron')),
+                start_pose)
+            obstacle3.set_target_velocity(carla.Vector3D(0, 5, 0))
+            actor_list.append(obstacle3)
+
+            start_pose.location.x = 98.1
+            start_pose.location.y = 30
+            start_pose.rotation.yaw = 90
+            obstacle4 = world.spawn_actor(
+                random.choice(blueprint_library.filter('vehicle.audi.etron')),
+                start_pose)
+            obstacle4.set_target_velocity(carla.Vector3D(0, 5, 0))
+            actor_list.append(obstacle4)
+
+            # start_pose.location.x = 102.1
+            # start_pose.location.y = 10
+            # start_pose.rotation.yaw = 90
+            # obstacle4 = world.spawn_actor(
+            #     random.choice(blueprint_library.filter('vehicle.audi.etron')),
+            #     start_pose)
+            # obstacle4.set_target_velocity(carla.Vector3D(0, 5, 0))
+            # actor_list.append(obstacle4)
+
+            """Defining the trajectory"""
+            resolution = 100
+            velocity = 15
+
+            straight1 = []
+            for t in np.linspace(-30, 100, resolution):
+                straight1.append((102.6, t, math.pi / 2, velocity))
+
+            trajectory = straight1
+
+        # elif CASE == 8:
+        #     map_range = 30
+        #     start_pose.location.x = 100
+        #     start_pose.location.y = 10
+        #     start_pose.rotation.yaw = 0
+        #     obstacle1 = world.spawn_actor(
+        #         random.choice(blueprint_library.filter('walker.*')),
+        #         start_pose)
+        #     control = carla.WalkerControl(direction=[1.0, 0.0, 0.0], speed=2.0, jump=False)
+        #     obstacle1.apply_control(control)
+        #     actor_list.append(obstacle1)
+        #
+        #     """Defining the trajectory"""
+        #     resolution = 100
+        #     velocity = 15
+        #
+        #     straight1 = []
+        #     for t in np.linspace(-30, 100, resolution):
+        #         straight1.append((102.6, t, math.pi / 2, velocity))
+        #
+        #     trajectory = straight1
+
+        elif CASE == 8:
+            map_range = 30
+            start_pose.location.x = 80
+            start_pose.location.y = 12
+            start_pose.rotation.yaw = 0
+            obstacle1 = world.spawn_actor(
+                random.choice(blueprint_library.filter('vehicle.audi.etron')),
+                start_pose)
+            obstacle1.set_target_velocity(carla.Vector3D(5, 0, 0))
+            actor_list.append(obstacle1)
+
+            """Defining the trajectory"""
+            resolution = 100
+            velocity = 15
+
+            straight1 = []
+            for t in np.linspace(-30, 100, resolution):
+                straight1.append((102.6, t, math.pi / 2, velocity))
+
+            trajectory = straight1
+
+        elif CASE == 9:
+            map_range = 30
+            start_pose.location.x = 80
+            start_pose.location.y = 12
+            start_pose.rotation.yaw = 0
+            obstacle1 = world.spawn_actor(
+                random.choice(blueprint_library.filter('vehicle.audi.etron')),
+                start_pose)
+            obstacle1.set_target_velocity(carla.Vector3D(4, 0, 0))
+            actor_list.append(obstacle1)
+
+            start_pose.location.x = 110
+            start_pose.location.y = 27
+            start_pose.rotation.yaw = 180
+            obstacle2 = world.spawn_actor(
+                random.choice(blueprint_library.filter('vehicle.audi.etron')),
+                start_pose)
+            obstacle2.set_target_velocity(carla.Vector3D(-1.5, 0, 0))
+            actor_list.append(obstacle2)
+
+            """Defining the trajectory"""
+            resolution = 100
+            velocity = 15
+
+            straight1 = []
+            for t in np.linspace(-30, 100, resolution):
+                straight1.append((102.6, t, math.pi / 2, velocity))
+
+            trajectory = straight1
+
+        """Creating Obstacle Map object"""
+        obstacle_map = ObstacleMap(ego, world, trajectory, range=map_range)
+
+        # obstacle_initial_ellipse2d = Ellipse2D(obstacle.bounding_box.extent.x,
+        #                                obstacle.bounding_box.extent.y,
+        #                                euclid.Vector2(start_pose.location.x,
+        #                                               start_pose.location.y),
+        #                                start_pose.rotation.yaw,
+        #                                buffer=1.0)
+
+        """ Create the Bounding Box object here """
         # of type cbf.obstacles.BoundingBox
-        actor_location = obstacle.get_transform().location
-        actor_rotation = obstacle.get_transform().rotation
-        actor_velocity = obstacle.get_velocity()
-        bbox = BoundingBox(extent = Vector3(obstacle.bounding_box.extent.x, obstacle.bounding_box.extent.y, obstacle.bounding_box.extent.z),
-                           location = Vector3(actor_location.x, actor_location.y, actor_location.z),
-                           rotation = Rot(roll = actor_rotation.roll*DEGREE_TO_RADIANS, pitch = actor_rotation.pitch*DEGREE_TO_RADIANS, yaw = actor_rotation.yaw*DEGREE_TO_RADIANS, right_handed=False),
-                           velocity = actor_velocity.length())
+        # actor_location = obstacle.get_transform().location
+        # actor_rotation = obstacle.get_transform().rotation
+        # actor_velocity = obstacle.get_velocity()
+        # bbox = BoundingBox(extent = Vector3(obstacle.bounding_box.extent.x, obstacle.bounding_box.extent.y, obstacle.bounding_box.extent.z),
+        #                    location = Vector3(actor_location.x, actor_location.y, actor_location.z),
+        #                    rotation = Rot(roll = actor_rotation.roll*DEGREE_TO_RADIANS, pitch = actor_rotation.pitch*DEGREE_TO_RADIANS, yaw = actor_rotation.yaw*DEGREE_TO_RADIANS, right_handed=False),
+        #                    velocity = actor_velocity.length())
         ##
-        
-        obstacle_ccone2d = CollisionCone2D.from_bounding_box(bbox, buffer=0.5)
 
-        """Defining the trajectory"""
-        start_x = -45.1  # [m]
-        start_y = 99.5  # [m]
-        start_yaw = np.radians(-90.0)  # [rad]
 
-        end_x = -45.1  # [m]
-        end_y = -40  # [m]
-        end_yaw = np.radians(-90.0)  # [rad]
-        # offset = 3.0
-        resolution = 100
-        velocity = 15
-
-        # bezier = Bezier(start_x, start_y, start_yaw, end_x, end_y, end_yaw, offset, resolution=100)
-        # curve = bezier.get_trajectory(velocity= velocity)
-
-        straight1 = []
-        for t in np.linspace(66.2, 46.2, resolution):
-            straight1.append((5.3, t, -math.pi/2, velocity))
-
-        # straight2 = []
-        # for t in np.linspace(28.7, 100.0, resolution):
-        #     straight2.append((t, 7.0, 0, velocity))
-
-        trajectory = straight1
-        obstacle_map = ObstacleMap(ego, world, trajectory, range=60)
-        
         # The CBF Controller Object
         CBF_MODE = CodeOptions.COLLISION_CONE_CBF
-        
+
         if CBF_MODE == CodeOptions.VELOCITY_CBF:
             gamma = 5.0
             cbf_controller = KBM_VC_CBF2D()
             L = ego.bounding_box.extent.x * 2
             cbf_controller.set_model_params(L=L)
-            
+
         if CBF_MODE == CodeOptions.ACCELERATION_CBF:
             lateral_stanley = LateralStanley(lr=lr, lf=lf, k=1.2, ks = 10)
             lateral_stanley.set_trajectory(trajectory)
 
             acc_pid = PID1(kp = 1.0, kd = 0.01, ki = 0.01)
-            # acc_pid = PID1(kp = 1.0)        
-            
+            # acc_pid = PID1(kp = 1.0)
+
             cbf_controller = DBM_CBF_2DS()
             cbf_controller.set_model_params(lr=lr, lf=lf)
-            cbf_controller.obstacle_list2d.update({0: obstacle_initial_ellipse2d})
-            
+            # cbf_controller.obstacle_list2d.update({0: obstacle_initial_ellipse2d})
+
         if CBF_MODE == CodeOptions.COLLISION_CONE_CBF:
             lateral_stanley = LateralStanley(lr=lr, lf=lf, k=1.2, ks = 10)
             lateral_stanley.set_trajectory(trajectory)
 
             acc_pid = PID1(kp = 1.0, kd = 0.01, ki = 0.01)
-            # acc_pid = PID1(kp = 1.0)        
-            
+            # acc_pid = PID1(kp = 1.0)
+
             cbf_controller = DBM_CBF_2DS()
             cbf_controller.set_model_params(lr=lr, lf=lf)
-            cbf_controller.obstacle_list2d.update({0: obstacle_ccone2d})
+            # cbf_controller.obstacle_list2d.update({0: obstacle_ccone2d})
 
         current_t = 0
         previous_t = 0
@@ -426,22 +709,22 @@ def main():
                 ### VEL CBF PART ^^^ ###
 
                 if CBF_MODE == CodeOptions.ACCELERATION_CBF:
-                    
+
                     # State and Obstacle List Update
                     # cbf_controller.obstacle_list2d.update_by_bounding_box(bbox_dict=obstacles_list)
                     # Updating ego state (global coords) in CBF
                     p = euclid.Vector2(ego.get_transform().location.x, ego.get_transform().location.y)
-                        
+
                     # Lateral Stanley
 
                     ego_v = obstacle_map.ego_v
                     ego_v = np.sqrt(ego_v.x**2 + ego_v.y**2 + ego_v.z**2)
-                    
+
                     cbf_controller.update_state(p=p, v=ego_v, theta=obstacle_map.ego_yaw * np.pi / 180)
                     u_ref = np.array([0.0, 0.0])
-                    
+
                     front_axle_center = euclid.Vector2((fl_wheel.position.x + fr_wheel.position.x)/2, (fl_wheel.position.y + fr_wheel.position.y)/2)/100
-                    
+
                     bbox_front_center = euclid.Vector2(obstacle_map.ego_x + obstacle_map.ego_width*np.cos(obstacle_map.ego_yaw)/2,\
                         obstacle_map.ego_y + obstacle_map.ego_height*np.sin(obstacle_map.ego_yaw)/2)
                     ### LATERAL STANLEY ###
@@ -455,7 +738,7 @@ def main():
                     max_steer = 1
                     delta = delta * convert_rad_to_steer
                     u_ref[1] = delta
-                    
+
                     # if delta > 0:
                     #     delta = max(0.0, min(delta, max_steer))
                     #     if delta - delta_previous > 0.1:
@@ -465,8 +748,8 @@ def main():
                     #     if abs(delta - delta_previous) > 0.1:
                     #         delta = delta_previous - 0.1
                     # delta_previous = delta
-                    
-            
+
+
                     #######################
 
                     ### ACC PID ###
@@ -475,21 +758,21 @@ def main():
                     acc_pid.set_dt(current_t - previous_t)
                     previous_t = current_t
                     current_ref = trajectory[target_idx]
-                    
+
                     # u_a is the acceleration equivalent o/p of PID
                     u_a = acc_pid.control(ego_v, current_ref[3])
                     u_ref[0] = u_a
                     ###############
-                    
+
                     # Solving the CBF's QP
                     if len(cbf_controller.obstacle_list2d) < 1:
                         u = u_ref
                     else:
                         u = cbf_controller.solve_cbf(u_ref)
-                        
+
                     u_a_cbf = u[0]
                     delta_cbf = u[1]
-                                            
+
                     if u_a_cbf > 0:
                         throttle = np.tanh(u_a_cbf)
                         throttle = max(0.0, min(1.0, throttle)) # saturation
@@ -504,36 +787,36 @@ def main():
 
                     throttle_previous =  throttle
                     brake_previous = brake
-                    
+
                     if delta_cbf > 0:
                         delta_cbf = max(0.0, min(delta_cbf, max_steer))
                     else:
                         delta_cbf = max(-max_steer, min(delta_cbf, 0.0))
-                        
+
                     cmd_control.throttle = throttle
                     cmd_control.steer = delta_cbf
                     cmd_control.brake = brake
                     cmd_control.manual_gear_shift = False
-                    
+
                     vehicle.apply_control(cmd_control)
 
                 if CBF_MODE == CodeOptions.COLLISION_CONE_CBF:
-                    
+
                     # State and Obstacle List Update
                     # cbf_controller.obstacle_list2d.update_by_bounding_box(bbox_dict=obstacles_list)
                     # Updating ego state (global coords) in CBF
                     p = euclid.Vector2(ego.get_transform().location.x, ego.get_transform().location.y)
-                        
+
                     # Lateral Stanley
 
                     ego_v = obstacle_map.ego_v
                     ego_v = np.sqrt(ego_v.x**2 + ego_v.y**2 + ego_v.z**2)
-                    
+
                     cbf_controller.update_state(p=p, v=ego_v, theta=obstacle_map.ego_yaw * np.pi / 180)
                     u_ref = np.array([0.0, 0.0])
-                    
+
                     front_axle_center = euclid.Vector2((fl_wheel.position.x + fr_wheel.position.x)/2, (fl_wheel.position.y + fr_wheel.position.y)/2)/100
-                    
+
                     bbox_front_center = euclid.Vector2(obstacle_map.ego_x + obstacle_map.ego_width*np.cos(obstacle_map.ego_yaw)/2,\
                         obstacle_map.ego_y + obstacle_map.ego_height*np.sin(obstacle_map.ego_yaw)/2)
                     ### LATERAL STANLEY ###
@@ -547,7 +830,7 @@ def main():
                     max_steer = 1
                     delta = delta * convert_rad_to_steer
                     u_ref[1] = delta
-                    
+
                     # if delta > 0:
                     #     delta = max(0.0, min(delta, max_steer))
                     #     if delta - delta_previous > 0.1:
@@ -557,8 +840,8 @@ def main():
                     #     if abs(delta - delta_previous) > 0.1:
                     #         delta = delta_previous - 0.1
                     # delta_previous = delta
-                    
-            
+
+
                     #######################
 
                     ### ACC PID ###
@@ -567,12 +850,32 @@ def main():
                     acc_pid.set_dt(current_t - previous_t)
                     previous_t = current_t
                     current_ref = trajectory[target_idx]
-                    
+
                     # u_a is the acceleration equivalent o/p of PID
                     u_a = acc_pid.control(ego_v, current_ref[3])
                     u_ref[0] = u_a
                     ###############
-                    
+
+                    """Creating and updating the collision cones for all obstacles"""
+                    ego_location = ego.get_transform().location
+                    ego_rotation = ego.get_transform().rotation
+                    ego_velocity = ego.get_velocity()
+                    s = np.array([ego_location.x, ego_location.y, ego_rotation.yaw * DEGREE_TO_RADIANS, ego_velocity.length()])
+
+                    for actor_id in obstacles_list:
+                        obstacle_location = obstacles_list[actor_id].get_transform().location
+                        obstacle_rotation = obstacles_list[actor_id].get_transform().rotation
+                        obstacle_velocity = obstacles_list[actor_id].get_velocity()
+                        s_obs = np.array(
+                            [obstacle_location.x, obstacle_location.y, obstacle_rotation.yaw * DEGREE_TO_RADIANS,
+                             obstacle_velocity.length()])
+                        a_cone = np.hypot(obstacles_list[actor_id].bounding_box.extent.x, obstacles_list[actor_id].bounding_box.extent.y)
+                        obstacle_ccone2d = CollisionCone2D(a_cone, s, s_obs)
+                        cbf_controller.obstacle_list2d[actor_id] = obstacle_ccone2d
+
+                    remove = [k for k in cbf_controller.obstacle_list2d if k not in obstacles_list.keys()]
+                    for k in remove: del cbf_controller.obstacle_list2d[k]
+
                     # Solving the CBF's QP
                     if len(cbf_controller.obstacle_list2d) < 1:
                         u = u_ref
@@ -580,21 +883,23 @@ def main():
                         ## fill s and s_obs here ##
                         # s     -> ego state [ego.x, ego.y, ego.yaw, ego.v]
                         # s_obs -> obs state [obs.x, obs.y, obs.yaw, obs.v]
-                        s = np.array([obstacle_map.ego_x, obstacle_map.ego_y, obstacle_map.ego_yaw*DEGREE_TO_RADIANS, obstacle_map.ego_v])
-                        obstacle_location = obstacle.get_transform().location
-                        obstacle_rotation = obstacle.get_transform().rotation
-                        obstacle_velocity = obstacle.get_velocity()
-                        s_obs = np.array([obstacle_location.x, obstacle_location.y, obstacle_rotation.yaw*DEGREE_TO_RADIANS, obstacle_velocity])
+                        # s = matrix([obstacle_map.ego_x, obstacle_map.ego_y, obstacle_map.ego_yaw*DEGREE_TO_RADIANS, obstacle_map.ego_v.length()])
+                        # obstacle_location = obstacle.get_transform().location
+                        # obstacle_rotation = obstacle.get_transform().rotation
+                        # obstacle_velocity = obstacle.get_velocity()
+                        # s_obs = matrix([obstacle_location.x, obstacle_location.y, obstacle_rotation.yaw*DEGREE_TO_RADIANS, obstacle_velocity.length()])
                         ##
-                        
-                        for obstacle in cbf_controller.obstacle_list2d.values:
-                            obstacle.update(s = s, s_obs = s_obs)
-                        
+
+                        # for obstacle in list(cbf_controller.obstacle_list2d.values()):
+                        #     obstacle.update(s = s, s_obs = s_obs)
+
+                        # obstacle_ccone2d.update(s = s, s_obs = s_obs)
+
                         u = cbf_controller.solve_cbf(u_ref)
-                        
+
                     u_a_cbf = u[0]
                     delta_cbf = u[1]
-                                            
+
                     if u_a_cbf > 0:
                         throttle = np.tanh(u_a_cbf)
                         throttle = max(0.0, min(1.0, throttle)) # saturation
@@ -609,39 +914,39 @@ def main():
 
                     throttle_previous =  throttle
                     brake_previous = brake
-                    
+
                     if delta_cbf > 0:
                         delta_cbf = max(0.0, min(delta_cbf, max_steer))
                     else:
                         delta_cbf = max(-max_steer, min(delta_cbf, 0.0))
-                        
+
                     cmd_control.throttle = throttle
                     cmd_control.steer = delta_cbf
                     cmd_control.brake = brake
                     cmd_control.manual_gear_shift = False
-                    
+
                     vehicle.apply_control(cmd_control)
 
                 fps = round(1.0 / snapshot.timestamp.delta_seconds)
-                
+
                 if (n % int(fps)) == 0:
                     if CodeOptions.PRINT_EGO_FRONT_AXLE_COORDS:
                         print(f"Front Axle Center: {front_axle_center}")
-                        
+
                     if CodeOptions.PRINT_CONTROLLER_OUTPUT:
                         print(f"PID OUTPUT: {u_a} | CBF acc OUTPUT: {u_a_cbf}")
                         print(f"STANLEY STEER: {delta} | CBF STEER: {delta_cbf}")
-                    
-                    if CodeOptions.PRINT_OBSTACLE_LIST:
-                        print(f"Obstacle List: {cbf_controller.obstacle_list2d}")
-                        print(f"Obstacle Eval: {cbf_controller.obstacle_list2d.f(p=p)}")
-                        
+
+                    # if CodeOptions.PRINT_OBSTACLE_LIST:
+                        # print(f"Obstacle List: {cbf_controller.obstacle_list2d}")
+                        # print(f"Obstacle Eval: {cbf_controller.obstacle_list2d.f(p=p)}")
+
                     if CodeOptions.PRINT_REF_CMD_STATE:
                         print(f"Current Reference Pt.: {current_ref}")
                         print(f"Throttle: {throttle}, Brake: {brake}, Steer: {delta}")
                         print(f"Vehicle State | x: {obstacle_map.ego_x}, y: {obstacle_map.ego_y},\
                             yaw: {obstacle_map.ego_yaw}, v: {ego_v}")
-                
+
                     if CodeOptions.PRINT_LINE:
                         print("------------------------------------------------------------------------------------------------------------------------")
 
