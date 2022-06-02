@@ -323,9 +323,9 @@ class CollisionCone2D(Obstacle2DBase):
                  a: float = 0.0, 
                  s: matrix = matrix(0, (4,1)), 
                  s_obs: matrix = matrix(0, (4,1)),
-                 buffer: float=0.5):
+                 buffer: float=1.50):
         """
-        Initializes the CollisionCone2D Object. 
+        Initializes the CollisionCone2D Object. F
         """
         self.s = s
         self.s_obs = s_obs
