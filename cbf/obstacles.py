@@ -348,7 +348,7 @@ class CollisionCone2D(Obstacle2DBase):
         self.cone_boundary = 0
         
         if (self.dist - self.a) >= 0:
-            self.cone_boundary = np.sqrt(self.dist**2 - self.a**2)
+            self.cone_boundary = np.sqrt(self.dist**2 - self.a**2) + ZERO_TOL
         
         if self.dist > ZERO_TOL:
             self.cos_phi = self.cone_boundary/self.dist
@@ -396,14 +396,14 @@ class CollisionCone2D(Obstacle2DBase):
     def dx(self, p: Point2):
 
         q_dx = self.s_vx - self.s_obs_vx
-        phi_term_dx = self.v_rel_norm * (self.s[0] - self.cx)/self.cone_boundary
+        phi_term_dx = self.v_rel_norm * (self.s[0] - self.cx)/(self.cone_boundary + ZERO_TOL)
         dx_ = q_dx + phi_term_dx
         return dx_
     
     def dy(self, p: Point2):
         
         q_dy = self.s_vy - self.s_obs_vy
-        phi_term_dy = self.v_rel_norm * (self.s[1] - self.cy)/self.cone_boundary
+        phi_term_dy = self.v_rel_norm * (self.s[1] - self.cy)/(self.cone_boundary + ZERO_TOL)
         dy_ = q_dy + phi_term_dy
         return dy_
 
@@ -424,7 +424,7 @@ class CollisionCone2D(Obstacle2DBase):
     def dt(self, p: Point2):
         
         q_dt = - (self.s_vx - self.s_obs_vx) * self.s_obs_vx - (self.s_vy - self.s_obs_vy) * self.s_obs_vy
-        phi_term_dt = -self.v_rel_norm * ( (self.s[0] - self.cx)*self.s_obs_vx + (self.s[1] - self.cy)*self.s_obs_vy )/self.cone_boundary
+        phi_term_dt = -self.v_rel_norm * ( (self.s[0] - self.cx)*self.s_obs_vx + (self.s[1] - self.cy)*self.s_obs_vy )/(self.cone_boundary + ZERO_TOL)
         dt_ = q_dt + phi_term_dt
         return dt_
 
@@ -453,7 +453,7 @@ class CollisionCone2D(Obstacle2DBase):
         self.v_rel = matrix([ self.s_vx - self.s_obs_vx, self.s_vy - self.s_obs_vy])
         self.dist = vec_norm(self.p_rel)
         self.v_rel_norm = vec_norm(self.v_rel)
-        self.cone_boundary = np.sqrt(self.dist**2 - self.a**2)
+        self.cone_boundary = np.sqrt(self.dist**2 - self.a**2) + ZERO_TOL
         if self.dist > ZERO_TOL:
             self.cos_phi = self.cone_boundary/self.dist
         else:
