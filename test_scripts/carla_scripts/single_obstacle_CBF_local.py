@@ -61,7 +61,7 @@ except:
 IMG_WIDTH = 1280
 IMG_HEIGHT = 720
 DEGREE_TO_RADIANS = math.pi/180
-CASE = 9
+CASE = 10
 
 # Suppressing the cvxopt solver output
 solvers.options['show_progress'] = False
@@ -410,7 +410,7 @@ def main():
 
             """Defining the trajectory"""
             resolution = 100
-            velocity = 10
+            velocity = 15
 
             straight1 = []
             for t in np.linspace(-30, 100, resolution):
@@ -505,30 +505,16 @@ def main():
 
             trajectory = straight1
 
-        # elif CASE == 8:
-        #     map_range = 30
-        #     start_pose.location.x = 100
-        #     start_pose.location.y = 10
-        #     start_pose.rotation.yaw = 0
-        #     obstacle1 = world.spawn_actor(
-        #         random.choice(blueprint_library.filter('walker.*')),
-        #         start_pose)
-        #     control = carla.WalkerControl(direction=[1.0, 0.0, 0.0], speed=2.0, jump=False)
-        #     obstacle1.apply_control(control)
-        #     actor_list.append(obstacle1)
-        #
-        #     """Defining the trajectory"""
-        #     resolution = 100
-        #     velocity = 15
-        #
-        #     straight1 = []
-        #     for t in np.linspace(-30, 100, resolution):
-        #         straight1.append((102.6, t, math.pi / 2, velocity))
-        #
-        #     trajectory = straight1
-
         elif CASE == 8:
             map_range = 30
+            start_pose.location.x = 100
+            start_pose.location.y = 10
+            start_pose.rotation.yaw = 0
+            obstacle2 = world.spawn_actor(
+                random.choice(blueprint_library.filter('walker.*')),
+                start_pose)
+            actor_list.append(obstacle2)
+
             start_pose.location.x = 80
             start_pose.location.y = 12
             start_pose.rotation.yaw = 0
@@ -567,6 +553,29 @@ def main():
                 start_pose)
             obstacle2.set_target_velocity(carla.Vector3D(-1.5, 0, 0))
             actor_list.append(obstacle2)
+
+            """Defining the trajectory"""
+            resolution = 100
+            velocity = 15
+
+            straight1 = []
+            for t in np.linspace(-30, 100, resolution):
+                straight1.append((102.6, t, math.pi / 2, velocity))
+
+            trajectory = straight1
+
+        elif CASE == 10:
+            map_range = 30
+            start_pose.location.x = 92
+            start_pose.location.y = 10
+            start_pose.rotation.yaw = -90
+            obstacle1 = world.spawn_actor(
+                random.choice(blueprint_library.filter('walker.*')),
+                start_pose)
+            control = carla.WalkerControl(direction = carla.Vector3D(1.1, 0, 0), speed=2, jump=False)
+            obstacle1.apply_control(control)
+            # obstacle1.set_target_velocity(carla.Vector3D(-0.5, 0, 0))
+            actor_list.append(obstacle1)
 
             """Defining the trajectory"""
             resolution = 100
