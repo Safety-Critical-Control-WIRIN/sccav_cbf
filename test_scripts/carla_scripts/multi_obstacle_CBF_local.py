@@ -61,7 +61,7 @@ except:
 IMG_WIDTH = 1280
 IMG_HEIGHT = 720
 DEGREE_TO_RADIANS = math.pi/180
-CASE = 10
+CASE = 1
 
 # Suppressing the cvxopt solver output
 solvers.options['show_progress'] = False
@@ -191,7 +191,7 @@ def main():
         m = world.get_map()
         start_pose = random.choice(m.get_spawn_points())
         start_pose.location.x = 102.6
-        start_pose.location.y = -30
+        start_pose.location.y = -50
         start_pose.location.z = 0.1
         start_pose.rotation.yaw = 90
 
@@ -200,6 +200,7 @@ def main():
         vehicle = world.spawn_actor(
             random.choice(blueprint_library.filter('vehicle.citroen.c3')),
             start_pose)
+        vehicle.set_velocity(carla.Vector3D(0,10,0))
         ego = vehicle
         actor_list.append(vehicle)
         # vehicle.set_simulate_physics(False)
@@ -268,9 +269,9 @@ def main():
         """Specifying the scenario"""
         map_range = 40
         if CASE == 1:
-            start_pose.location.x = 101.6
+            start_pose.location.x = 102.6
             start_pose.location.y = 30
-            start_pose.rotation.yaw = 0
+            start_pose.rotation.yaw = 90
             obstacle1 = world.spawn_actor(
                 random.choice(blueprint_library.filter('vehicle.audi.etron')),
                 start_pose)
@@ -287,7 +288,7 @@ def main():
             end_yaw = np.radians(180)  # [rad]
             offset = 3.0
             resolution = 100
-            velocity = 10
+            velocity = 50
 
             # bezier = Bezier(start_x, start_y, start_yaw, end_x, end_y, end_yaw, offset, resolution=100)
             # curve = bezier.get_trajectory(velocity=velocity)
