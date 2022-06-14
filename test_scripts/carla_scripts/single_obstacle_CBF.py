@@ -23,6 +23,7 @@ except ImportError:
 
 import numpy as np
 import matplotlib.pyplot as plt
+import lane_cbf_test as lutils
 
 from matplotlib.patches import Rectangle, Ellipse
 from matplotlib.transforms import Affine2D

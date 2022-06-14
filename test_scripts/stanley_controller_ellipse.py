@@ -24,6 +24,7 @@ import errno
 
 # from matplotlib.patches import Ellipse, Circle
 import matplotlib.patches as patches
+import lane_cbf_test as lutils
 from cvxopt import matrix, solvers, spdiag, sqrt
 from euclid import *
 
@@ -404,6 +405,54 @@ def CBF_cone(s: np.array,
     # return solvers.cp(F, G=G, h=h, dims=dims)['x']
     return solvers.cp(F)['x']
 
+def CBF_lane(s: np.ndarray, 
+             lane: lutils.PolynomialLaneCurve, 
+             u_des: matrix,
+             alpha: float):
+    
+    m = 1 # No. of Constraints
+    n = 2 # Dimension of x0 i.e. u
+    u_des = matrix(u_des)
+    s = matrix(s)
+    xc = lane.shortest_distance(Point2(s[0], s[1]), x0 = s[0])
+    f = lane.eval(xc)
+    df = lane.df(xc, 1)[0]
+    ddf = lane.df(xc, 2)[0]
+    
+    def F(x=None, z=None):
+        if x is None: return m, matrix(0.0, (n, 1))
+        # if x is None: return m, u_des    
+        # for 1 objective function and 1 constraint and 3 state vars
+        f = matrix(0.0, (m+1, 1))
+        Df = matrix(0.0, (m+1, n))
+        f[0] = (x - u_des).T * (x - u_des)
+        ### CBFs
+        ## eta
+        eta = 1 + df*ddf + df**2 - s[1]*ddf
+        if abs(eta) < ZERO_TOL:
+            eta = ZERO_TOL 
+        ## h
+        h1 = (xc - s[0])**2 + (f - s[1])**2
+        h1_dx = -2 * (s[0] - xc) * (eta - 1)/eta
+        h1_dy = -2 * (s[1] - f) * (eta - df**2)/eta
+        h1_dtheta = 0
+        h1_dv = 0
+        # temp vars are written as tn
+        Dh1 = matrix([h1_dx, h1_dy, h1_dtheta, h1_dv], (1, 4))
+        f_c = matrix([ s[3] * np.cos(s[2]), s[3] * np.sin(s[2]), 0, 0], (4, 1))
+        g_c = matrix([ [0, 0, 0, 1], [-s[3] * np.sin(s[2]), s[3] * np.cos(s[2]), s[3]/lr, 0] ])
+
+        f[1] = -(Dh1 * (f_c + g_c * x) + alpha * h1)
+
+        Df[0, :] = 2 * (x - u_des).T
+        Df[1, :] = -1 * (Dh1 * g_c)
+
+        if z is None: return f, Df
+        H = z[0] * 2 * matrix(np.eye(n))
+        return f, Df, H
+
+    return solvers.cp(F)['x']
+
 
 def main():
     """Plot an example of Stanley steering control on a cubic spline."""
@@ -698,14 +747,14 @@ def main():
             ax.add_patch(collision_cone)
             
             # Adding the velocity vector
-            # plt.quiver([state.x], 
-            #            [state.y], 
-            #            [state.v * np.cos(state.yaw)],
-            #            [state.v * np.sin(state.yaw)],
-            #            width = 0.005,
-            #            scale_units='xy',
-            #            scale = 1,
-            #            zorder=10)
+            plt.quiver([state.x], 
+                       [state.y], 
+                       [state.v * np.cos(state.yaw)],
+                       [state.v * np.sin(state.yaw)],
+                       width = 0.005,
+                       scale_units='xy',
+                       scale = 1,
+                       zorder=10)
             
             # im = plt.imshow(animated=True)
             # ims.append([im])            

@@ -348,7 +348,7 @@ class CollisionCone2D(Obstacle2DBase):
         self.cone_boundary = 0
         
         if (self.dist - self.a) >= 0:
-            self.cone_boundary = np.sqrt(self.dist**2 - self.a**2)
+            self.cone_boundary = np.sqrt(self.dist**2 - self.a**2) + ZERO_TOL
         
         if self.dist > ZERO_TOL:
             self.cos_phi = self.cone_boundary/self.dist
@@ -453,7 +453,7 @@ class CollisionCone2D(Obstacle2DBase):
         self.v_rel = matrix([ self.s_vx - self.s_obs_vx, self.s_vy - self.s_obs_vy])
         self.dist = vec_norm(self.p_rel)
         self.v_rel_norm = vec_norm(self.v_rel)
-        self.cone_boundary = np.sqrt(self.dist**2 - self.a**2)
+        self.cone_boundary = np.sqrt(self.dist**2 - self.a**2) + ZERO_TOL
         if self.dist > ZERO_TOL:
             self.cos_phi = self.cone_boundary/self.dist
         else:
