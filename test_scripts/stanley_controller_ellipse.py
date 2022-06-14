@@ -13,7 +13,6 @@ modified by: Neelaksh Singh
 for: Safety Critical Control of Autonomous Vehicles - WIRIN
 
 """
-
 import numpy as np
 import matplotlib.pyplot as plt
 # import matplotlib.animation as animation
@@ -408,16 +407,17 @@ def CBF_cone(s: np.array,
 def CBF_lane(s: np.ndarray, 
              lane: lutils.PolynomialLaneCurve, 
              u_des: matrix,
+             buffer: float,
              alpha: float):
     
     m = 1 # No. of Constraints
     n = 2 # Dimension of x0 i.e. u
     u_des = matrix(u_des)
     s = matrix(s)
-    xc = lane.shortest_distance(Point2(s[0], s[1]), x0 = s[0])
-    f = lane.eval(xc)
-    df = lane.df(xc, 1)[0]
-    ddf = lane.df(xc, 2)[0]
+    xc = lane.shortest_distance(Point2(s[0], s[1]), x0 = s[0])[0]
+    g = lane.eval(xc)
+    dg = lane.df(xc, 1)
+    ddg = lane.df(xc, 2)
     
     def F(x=None, z=None):
         if x is None: return m, matrix(0.0, (n, 1))
@@ -428,13 +428,15 @@ def CBF_lane(s: np.ndarray,
         f[0] = (x - u_des).T * (x - u_des)
         ### CBFs
         ## eta
-        eta = 1 + df*ddf + df**2 - s[1]*ddf
+        eta = 1 + dg*ddg + dg**2 - s[1]*ddg
         if abs(eta) < ZERO_TOL:
             eta = ZERO_TOL 
         ## h
-        h1 = (xc - s[0])**2 + (f - s[1])**2
-        h1_dx = -2 * (s[0] - xc) * (eta - 1)/eta
-        h1_dy = -2 * (s[1] - f) * (eta - df**2)/eta
+        h1 = (xc - s[0])**2 + (g - s[1])**2 - buffer
+        # h1_dx = -2 * (s[0] - xc) * (eta - 1)/eta
+        # h1_dy = -2 * (s[1] - g) * (eta - dg**2)/eta
+        h1_dx = 2 * (s[0] - xc) * (eta - 1)/eta
+        h1_dy = 2 * (s[1] - g) * (eta - dg**2)/eta
         h1_dtheta = 0
         h1_dv = 0
         # temp vars are written as tn
@@ -489,8 +491,8 @@ def main():
     # FLAGS and IMP. CONSTANTS
     USE_CBF = True
     ZERO_TOL = 1e-3
-    CBF_TYPE = 4 # 0: Ellipse, 1: Distance, 2: Ellipse - Acceleration Controlled
-                 # 3: Ellipse - API, 4: Collision Cone
+    CBF_TYPE = 5 # 0: Ellipse, 1: Distance, 2: Ellipse - Acceleration Controlled
+                 # 3: Ellipse - API, 4: Collision Cone, 5: Lane Boundary
     a_max = 2.29 # m/s^2
     a_min = -2.29
     # params for animation
@@ -616,6 +618,31 @@ def main():
                 state.update_com(a_cbf, di_cbf)
                 print(" a: ", a_cbf, " delta: ", di_cbf)
                 print(" v: ", v_, " old a: ", a_, " old delta: ", di)
+                
+            if CBF_TYPE == 5:
+                a_ = pid_control(target_speed, state.v)
+                
+                # Initializing the lane
+                x_lane_points = np.array([[20.0, 80.0, 100.0]])
+                y_lane_points = np.array([[-30.0, -30.0, -40.0]])
+                lane = lutils.PolynomialLaneCurve.lsq_curve(x_lane_points,
+                                                            y_lane_points,
+                                                            n = 2)
+                
+                ## Without Class ##
+                beta_ = np.arctan2(lr * np.tan(di), lf + lr)
+                u_des = np.array([a_, beta_])
+                s = np.array([ state.x, state.y, state.yaw, state.v ])
+                u = CBF_lane(s, lane, u_des, buffer=5.0, alpha=gamma)
+                # a_cbf = saturation(u[0], a_min, a_max)
+                a_cbf = u[0]
+                beta_cbf = u[1]
+                di_cbf = np.arctan2((lf + lr)*np.tan(beta_cbf), lr)
+                delta_cbf[i] = di_cbf
+                
+                state.update_com(a_cbf, di_cbf)
+                print(" a: ", a_cbf, " delta: ", di_cbf)
+                print(" v: ", v_, " old a: ", a_, " old delta: ", di)
             
             print("time: ", time)
             
@@ -682,7 +709,7 @@ def main():
                     cbf_active = True
                     plt.text(0, 25, "CBF Status: Triggered")
 
-            if CBF_TYPE in [2, 4]:
+            if CBF_TYPE in [2, 4, 5]:
                 if(abs(a_cbf) > ZERO_TOL):
                     plt.text(0, 30, "CBF a[m/s]:" + str(a_cbf)[:4])
                 else:
@@ -697,6 +724,8 @@ def main():
                     plt.text(75, 25, "CBF Type: Ellipse|A")
                 if USE_CBF and (CBF_TYPE == 4):
                     plt.text(75, 25, "CBF Type: Cone|A")
+                if USE_CBF and (CBF_TYPE == 5):
+                    plt.text(75, 25, "CBF Type: Lane|A")
 
                 trig_flag_a = abs(a_cbf - a_) >= ZERO_TOL
                 trig_flag_d = abs(di_cbf - di) >= ZERO_TOL
@@ -710,41 +739,48 @@ def main():
                     plt.text(0, 25, "CBF Status: Dormant")
 
             plt.text(0, 20, "Gamma: " + str(gamma)[:4])            
-
-            ax = plt.gca()
-            obs_ellipse = patches.Ellipse(xy=(o_cx, o_cy), width=a, height=b, ec='b', fc=(0,1,0,0.5), lw=2, ls='-.')
-            obs_dist_circle = patches.Circle(xy=(o_cx, o_cy), radius=Ds, ls='--', lw=2, ec='k', fc=(0,1,0,0))
-            dist = np.hypot(state.x - o_cx, state.y - o_cy)
             
-            if (dist > ZERO_TOL) and ((dist**2 - a_cone**2) > 0):
-                phi = np.arccos(np.sqrt(dist**2 - a_cone**2)/dist)
-            else:
-                phi = np.pi/2
-            
-            # phi = np.arccos(np.sqrt(dist**2 - a_cone**2)/dist)
+            if CBF_TYPE in [1, 2, 3, 4]:
+                ax = plt.gca()
+                obs_ellipse = patches.Ellipse(xy=(o_cx, o_cy), width=a, height=b, ec='b', fc=(0,1,0,0.5), lw=2, ls='-.')
+                obs_dist_circle = patches.Circle(xy=(o_cx, o_cy), radius=Ds, ls='--', lw=2, ec='k', fc=(0,1,0,0))
+                dist = np.hypot(state.x - o_cx, state.y - o_cy)
                 
-            alpha = np.pi + np.arctan2(state.y - o_cy, state.x - o_cx)
-            t1 = (alpha + phi)*RAD_TO_DEG
-            t2 = (alpha - phi)*RAD_TO_DEG
-            if t1 < t2:
-                theta1 = t1
-                theta2 = t2
-            else:
-                theta1 = t2
-                theta2 = t1
-            collision_cone = patches.Wedge(center = (state.x, state.y), 
-                                           r = dist,
-                                           theta1 = theta1,
-                                           theta2 = theta2,
-                                           linestyle='-.',
-                                           linewidth=1.5,
-                                           fill = True,
-                                           facecolor = 'pink',
-                                           alpha = 0.3,
-                                           edgecolor = 'pink')
-            ax.add_patch(obs_ellipse)
-            ax.add_patch(obs_dist_circle)
-            ax.add_patch(collision_cone)
+                if (dist > ZERO_TOL) and ((dist**2 - a_cone**2) > 0):
+                    phi = np.arccos(np.sqrt(dist**2 - a_cone**2)/dist)
+                else:
+                    phi = np.pi/2
+                
+                # phi = np.arccos(np.sqrt(dist**2 - a_cone**2)/dist)
+                    
+                alpha = np.pi + np.arctan2(state.y - o_cy, state.x - o_cx)
+                t1 = (alpha + phi)*RAD_TO_DEG
+                t2 = (alpha - phi)*RAD_TO_DEG
+                if t1 < t2:
+                    theta1 = t1
+                    theta2 = t2
+                else:
+                    theta1 = t2
+                    theta2 = t1
+                collision_cone = patches.Wedge(center = (state.x, state.y), 
+                                            r = dist,
+                                            theta1 = theta1,
+                                            theta2 = theta2,
+                                            linestyle='-.',
+                                            linewidth=1.5,
+                                            fill = True,
+                                            facecolor = 'pink',
+                                            alpha = 0.3,
+                                            edgecolor = 'pink')
+                ax.add_patch(obs_ellipse)
+                ax.add_patch(obs_dist_circle)
+                ax.add_patch(collision_cone)
+                
+            if CBF_TYPE == 5:
+                res = 0.1
+                x_pts = np.linspace(0, 100, int(100/res))
+                y_pts = lane.eval(x_pts)
+                plt.plot(x_pts, y_pts, '-g', label='lane')
             
             # Adding the velocity vector
             plt.quiver([state.x], 
