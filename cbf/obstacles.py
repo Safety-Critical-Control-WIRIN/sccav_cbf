@@ -323,9 +323,9 @@ class CollisionCone2D(Obstacle2DBase):
                  a: float = 0.0, 
                  s: matrix = matrix(0, (4,1)), 
                  s_obs: matrix = matrix(0, (4,1)),
-                 buffer: float=0.5):
+                 buffer: float=1.50):
         """
-        Initializes the CollisionCone2D Object. 
+        Initializes the CollisionCone2D Object. F
         """
         self.s = s
         self.s_obs = s_obs
@@ -396,14 +396,14 @@ class CollisionCone2D(Obstacle2DBase):
     def dx(self, p: Point2):
 
         q_dx = self.s_vx - self.s_obs_vx
-        phi_term_dx = self.v_rel_norm * (self.s[0] - self.cx)/self.cone_boundary
+        phi_term_dx = self.v_rel_norm * (self.s[0] - self.cx)/(self.cone_boundary + ZERO_TOL)
         dx_ = q_dx + phi_term_dx
         return dx_
     
     def dy(self, p: Point2):
         
         q_dy = self.s_vy - self.s_obs_vy
-        phi_term_dy = self.v_rel_norm * (self.s[1] - self.cy)/self.cone_boundary
+        phi_term_dy = self.v_rel_norm * (self.s[1] - self.cy)/(self.cone_boundary + ZERO_TOL)
         dy_ = q_dy + phi_term_dy
         return dy_
 
@@ -424,7 +424,7 @@ class CollisionCone2D(Obstacle2DBase):
     def dt(self, p: Point2):
         
         q_dt = - (self.s_vx - self.s_obs_vx) * self.s_obs_vx - (self.s_vy - self.s_obs_vy) * self.s_obs_vy
-        phi_term_dt = -self.v_rel_norm * ( (self.s[0] - self.cx)*self.s_obs_vx + (self.s[1] - self.cy)*self.s_obs_vy )/self.cone_boundary
+        phi_term_dt = -self.v_rel_norm * ( (self.s[0] - self.cx)*self.s_obs_vx + (self.s[1] - self.cy)*self.s_obs_vy )/(self.cone_boundary + ZERO_TOL)
         dt_ = q_dt + phi_term_dt
         return dt_
 

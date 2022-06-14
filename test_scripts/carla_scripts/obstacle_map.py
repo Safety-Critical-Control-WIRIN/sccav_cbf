@@ -16,13 +16,14 @@ import glob
 import os
 import sys
 import time
+
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import cv2
 import numpy as np
 
 # ROS Imports
-import rospy
+# import rospy
 
 try:
     sys.path.append(glob.glob('../carla/dist/carla-*%d.%d-%s.egg' % (
@@ -46,11 +47,11 @@ except:
     raise
 
 # ROS Imports
-from nav_msgs.msg import Odometry
+# from nav_msgs.msg import Odometry
 
 class ObstacleMap:
 
-    def __init__(self, ego, world, trajectory, display=True, range=30):
+    def __init__(self, ego, world, trajectory, display=True, range=30, collision_cone=True):
         """
         Initializing the ObstacleMap class with current ego vehicle, and world parameters
         :param ego: Vehicle object corresponding to the ego vehicle
@@ -66,12 +67,14 @@ class ObstacleMap:
         self.ego_y = None
         self.ego_x = None
         self.ego_yaw = None
+        self.ego_v = None
         self.trajectory = np.array(trajectory)[:,:2]
 
         self.walkers = None
         self.vehicles = None
 
         self.display = display
+        self.collision_cone = collision_cone
         self.cbf_active = False
         self.range = range
 
@@ -111,6 +114,11 @@ class ObstacleMap:
                                                 fill=True,
                                                 fc='green'))
 
+                    # unit_ego_velocity_x = self.ego_v.make_unit_vector().x
+                    # unit_ego_velocity_y = self.ego_v.make_unit_vector().y
+                    # scaling_constant = 5
+                    # plt.arrow(0, 0, unit_ego_velocity_x * scaling_constant, unit_ego_velocity_y * scaling_constant, width=0.2)
+
                 elif actor.id == self.ego.id and self.display:
                     self.ax.add_patch(patches.Rectangle(xy=(- self.ego_width / 2, - self.ego_height / 2),
                                                 width=self.ego_width,
@@ -121,17 +129,24 @@ class ObstacleMap:
                                                                                        self.ego_yaw) + self.ax.transData,
                                                 fill=True,
                                                 fc='green'))
+                    # unit_ego_velocity_x = self.ego_v.make_unit_vector().x
+                    # unit_ego_velocity_y = self.ego_v.make_unit_vector().y
+                    # scaling_constant = 5
+                    # plt.arrow(0, 0, unit_ego_velocity_x * scaling_constant, unit_ego_velocity_y * scaling_constant, width=0.2)
 
                 else:
                     d_from_ego = actor.get_transform().location.distance(self.ego.get_transform().location)
                     if d_from_ego < self.range:
                         actor_location = actor.get_transform().location
                         actor_rotation = actor.get_transform().rotation
-                        bounding_box = Bbox(extent = Vector3(actor.bounding_box.extent.x, actor.bounding_box.extent.y, actor.bounding_box.extent.z),
-                                            location = Vector3(actor_location.x, actor_location.y, actor_location.z),
-                                            rotation = Rot(roll = actor_rotation.roll, pitch = actor_rotation.pitch, yaw = actor_rotation.yaw, right_handed=False))
+                        actor_velocity = actor.get_velocity()
+                        # bounding_box = Bbox(extent = Vector3(actor.bounding_box.extent.x, actor.bounding_box.extent.y, actor.bounding_box.extent.z),
+                        #                     location = Vector3(actor_location.x, actor_location.y, actor_location.z),
+                        #                     rotation = Rot(roll = actor_rotation.roll, pitch = actor_rotation.pitch, yaw = actor_rotation.yaw, right_handed=False),
+                        #                     velocity = actor_velocity.length())
                         
-                        self.obstacles_list[str(actor.id)] = bounding_box
+                        # self.obstacles_list[str(actor.id)] = bounding_box
+                        self.obstacles_list[str(actor.id)] = actor
 
                         if self.display:
                             actor_x = actor_location.x - self.ego_x
@@ -139,7 +154,34 @@ class ObstacleMap:
                             actor_yaw = actor_rotation.yaw
                             actor_height = 2 * actor.bounding_box.extent.y
                             actor_width = 2 * actor.bounding_box.extent.x
-                            self.ax.add_patch(patches.Ellipse(xy=(actor_x, actor_y),
+                            # unit_actor_velocity_x = actor_velocity.make_unit_vector().x
+                            # unit_actor_velocity_y = actor_velocity.make_unit_vector().y
+                            # scaling_constant = 5
+                            # plt.arrow(actor_x, actor_y, unit_actor_velocity_x * scaling_constant, unit_actor_velocity_y * scaling_constant, width=0.05)
+
+                            if self.collision_cone:
+                                (Px, Py) = (0, 0)
+                                (Cx, Cy) = (actor_x, actor_y)
+                                a = math.sqrt((actor_width/2)**2 + (actor_height/2)**2)
+
+                                b = math.sqrt((Px - Cx) ** 2 + (Py - Cy) ** 2)  # hypot() also works here
+                                th = math.acos(a / b)  # angle theta
+                                d = math.atan2(Py - Cy, Px - Cx)  # direction angle of point P from C
+                                d1 = d + th  # direction angle of point T1 from C
+                                d2 = d - th  # direction angle of point T2 from C
+
+                                T1x = Cx + a * math.cos(d1)
+                                T1y = Cy + a * math.sin(d1)
+                                T2x = Cx + a * math.cos(d2)
+                                T2y = Cy + a * math.sin(d2)
+
+                                plt.plot((Px, T1x), (Py, T1y), color='red')
+                                plt.plot((Px, T2x), (Py, T2y), color='red')
+
+                                self.ax.add_artist(plt.Circle((Cx, Cy), a))
+
+                            else:
+                                self.ax.add_patch(patches.Ellipse(xy=(actor_x, actor_y),
                                                       width=actor_width + buffer,
                                                       height=actor_height + buffer,
                                                       edgecolor='red',
@@ -175,9 +217,9 @@ class ObstacleMap:
 
     def get_obstacle_map(self):
         self.plot_actors(self.vehicles, self.walkers, buffer=1)
-        self.plot_trajectory()
         im = None
         if self.display:
+            self.plot_trajectory()
             self.fig.canvas.draw()
             data = np.frombuffer(self.fig.canvas.tostring_rgb(), dtype=np.uint8)
             w, h = self.fig.canvas.get_width_height()
