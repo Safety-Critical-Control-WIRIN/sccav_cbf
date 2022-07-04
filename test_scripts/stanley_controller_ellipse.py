@@ -433,10 +433,8 @@ def CBF_lane(s: np.ndarray,
             eta = ZERO_TOL 
         ## h
         h1 = (xc - s[0])**2 + (g - s[1])**2 - buffer
-        # h1_dx = -2 * (s[0] - xc) * (eta - 1)/eta
-        # h1_dy = -2 * (s[1] - g) * (eta - dg**2)/eta
-        h1_dx = 2 * (s[0] - xc) * (eta - 1)/eta
-        h1_dy = 2 * (s[1] - g) * (eta - dg**2)/eta
+        h1_dx = ( 2/eta ) * ( (s[0] - xc) * (eta - 1) - (s[1] - g) * dg )
+        h1_dy = ( 2/eta ) * ( -(s[0] - xc) * dg + (s[1] - g) * (eta - dg**2) )
         h1_dtheta = 0
         h1_dv = 0
         # temp vars are written as tn
@@ -453,8 +451,123 @@ def CBF_lane(s: np.ndarray,
         H = z[0] * 2 * matrix(np.eye(n))
         return f, Df, H
 
-    return solvers.cp(F)['x']
+    return solvers.cp(F)['x'], xc
 
+def CBF_lane_sqrt(s: np.ndarray, 
+             lane: lutils.PolynomialLaneCurve, 
+             u_des: matrix,
+             buffer: float,
+             alpha: float):
+    
+    m = 1 # No. of Constraints
+    n = 2 # Dimension of x0 i.e. u
+    u_des = matrix(u_des)
+    s = matrix(s)
+    xc = lane.shortest_distance(Point2(s[0], s[1]), x0 = s[0])[0]
+    g = lane.eval(xc)
+    dg = lane.df(xc, 1)
+    ddg = lane.df(xc, 2)
+    
+    def F(x=None, z=None):
+        if x is None: return m, matrix(0.0, (n, 1))
+        # if x is None: return m, u_des    
+        # for 1 objective function and 1 constraint and 3 state vars
+        f = matrix(0.0, (m+1, 1))
+        Df = matrix(0.0, (m+1, n))
+        f[0] = (x - u_des).T * (x - u_des)
+        ### CBFs
+        ## eta
+        eta = 1 + dg*ddg + dg**2 - s[1]*ddg
+        if abs(eta) < ZERO_TOL:
+            eta = ZERO_TOL 
+        ## h
+        h1 = np.sqrt((xc - s[0])**2 + (g - s[1])**2) - buffer
+        h1_dx = ( ( 2/eta ) * ( (s[0] - xc) * (eta - 1) - (s[1] - g) * dg ) ) / (2 * (h1 + buffer))
+        h1_dy = ( ( 2/eta ) * ( -(s[0] - xc) * dg + (s[1] - g) * (eta - dg**2) ) ) / (2 * (h1 + buffer))
+        h1_dtheta = 0
+        h1_dv = 0
+        # temp vars are written as tn
+        Dh1 = matrix([h1_dx, h1_dy, h1_dtheta, h1_dv], (1, 4))
+        f_c = matrix([ s[3] * np.cos(s[2]), s[3] * np.sin(s[2]), 0, 0], (4, 1))
+        g_c = matrix([ [0, 0, 0, 1], [-s[3] * np.sin(s[2]), s[3] * np.cos(s[2]), s[3]/lr, 0] ])
+
+        f[1] = -(Dh1 * (f_c + g_c * x) + alpha * h1)
+
+        Df[0, :] = 2 * (x - u_des).T
+        Df[1, :] = -1 * (Dh1 * g_c)
+
+        if z is None: return f, Df
+        H = z[0] * 2 * matrix(np.eye(n))
+        return f, Df, H
+
+    return solvers.cp(F)['x'], xc
+
+def CBF_lane_cf(s: np.ndarray, 
+             lane: lutils.PolynomialLaneCurve, 
+             u_des: matrix,
+             buffer: float,
+             alpha: float):
+    
+    m = 1 # No. of Constraints
+    n = 2 # Dimension of x0 i.e. u
+    u_des = matrix(u_des)
+    u = u_des
+    s = matrix(s)
+    x = s[0]
+    y = s[1]
+    v = s[3]
+    theta = s[2]
+    xc = lane.shortest_distance(Point2(s[0], s[1]), x0 = s[0])[0]
+    g = lane.eval(xc)
+    dg = lane.df(xc, 1)
+    ddg = lane.df(xc, 2)
+    eta = 1 + dg*ddg + dg**2 - s[1]*ddg
+    
+    Lfc_h = (2*v/eta) * ( (x - xc)*( (eta - 1)*np.cos(theta) - dg*np.sin(theta) ) + (y - g)*( dg*np.cos(theta) - (eta - dg**2)*np.sin(theta) ) )
+    Lgc_h1 = (2*v/eta) * ( (y - g)*( dg*np.sin(theta) + (eta - dg**2)*np.cos(theta) - (x - xc)*( (eta - 1)*np.sin(theta) + dg*np.cos(theta) ) ) )
+    
+    h = (xc - x)**2 + (g - y)**2 - buffer
+    
+    psi = Lfc_h + Lgc_h1*u_des[1] + alpha*h
+    
+    if psi <= 0:
+        u[1] = u[1] - psi/Lgc_h1
+    
+    return u, xc, psi
+
+def CBF_lane_cf_sqrt(s: np.ndarray, 
+             lane: lutils.PolynomialLaneCurve, 
+             u_des: matrix,
+             buffer: float,
+             alpha: float):
+    
+    m = 1 # No. of Constraints
+    n = 2 # Dimension of x0 i.e. u
+    u_des = matrix(u_des)
+    u = u_des
+    s = matrix(s)
+    x = s[0]
+    y = s[1]
+    v = s[3]
+    theta = s[2]
+    xc = lane.shortest_distance(Point2(s[0], s[1]), x0 = s[0])[0]
+    g = lane.eval(xc)
+    dg = lane.df(xc, 1)
+    ddg = lane.df(xc, 2)
+    eta = 1 + dg*ddg + dg**2 - s[1]*ddg
+    
+    h = np.sqrt((xc - x)**2 + (g - y)**2) - buffer
+    
+    Lfc_h = (2*v/eta) * ( (x - xc)*( (eta - 1)*np.cos(theta) - dg*np.sin(theta) ) + (y - g)*( dg*np.cos(theta) - (eta - dg**2)*np.sin(theta) ) ) / (2 * (h + buffer))
+    Lgc_h1 = (2*v/eta) * ( (y - g)*( dg*np.sin(theta) + (eta - dg**2)*np.cos(theta) - (x - xc)*( (eta - 1)*np.sin(theta) + dg*np.cos(theta) ) ) ) / (2 * (h + buffer))
+    
+    
+    psi = Lfc_h + Lgc_h1*u_des[1] + alpha*h
+    
+    if psi < 0:
+        u[1] = u[1] - psi/Lgc_h1
+    
+    return u, xc, psi
 
 def main():
     """Plot an example of Stanley steering control on a cubic spline."""
@@ -623,17 +736,41 @@ def main():
                 a_ = pid_control(target_speed, state.v)
                 
                 # Initializing the lane
-                x_lane_points = np.array([[20.0, 80.0, 100.0]])
-                y_lane_points = np.array([[-30.0, -30.0, -40.0]])
+                ### 1 ###
+                # x_lane_points = np.array([[20.0, 80.0, 100.0]])
+                # y_lane_points = np.array([[-30.0, -30.0, -40.0]])
+                
+                ### 2 ###
+                # x_lane_points = np.array([[20.0, 60.0, 90.0, 100.0]])
+                # y_lane_points = np.array([[-35.0, -30.0, -32.0, -40.0]])
+                
+                ### 3 ###
+                # x_lane_points = np.array([[120.0, 80.0, 20.0]])
+                # y_lane_points = np.array([[-25.0, -30.0, -35.0]])
+                
+                ### 4 ###
+                # x_lane_points = np.array([[60.0, 80.0, 100.0, 120.0]])
+                # y_lane_points = np.array([[-30.0, -30.0, -30.0, -20.0]])
+                
+                ### 5 ###
+                x_lane_points = np.array([[60.0, 70.0, 80.0, 90.0, 100.0, 110.0]])
+                y_lane_points = np.array([[-30.0, -30.0, -35.0, -25.0, -30.0, -25.0]])
+                
                 lane = lutils.PolynomialLaneCurve.lsq_curve(x_lane_points,
                                                             y_lane_points,
-                                                            n = 2)
+                                                            n = 5)
                 
                 ## Without Class ##
                 beta_ = np.arctan2(lr * np.tan(di), lf + lr)
                 u_des = np.array([a_, beta_])
                 s = np.array([ state.x, state.y, state.yaw, state.v ])
-                u = CBF_lane(s, lane, u_des, buffer=5.0, alpha=gamma)
+                
+                u, xc = CBF_lane(s, lane, u_des, buffer=0.0, alpha=gamma)
+                # u, xc = CBF_lane_sqrt(s, lane, u_des, buffer=1.0, alpha=gamma)
+                # u, xc, psi = CBF_lane_cf(s, lane, u_des, buffer=100.0, alpha=gamma)
+                # u, xc, psi = CBF_lane_cf_sqrt(s, lane, u_des, buffer=1.0, alpha=gamma)
+                CFORM = False
+                
                 # a_cbf = saturation(u[0], a_min, a_max)
                 a_cbf = u[0]
                 beta_cbf = u[1]
@@ -641,6 +778,7 @@ def main():
                 delta_cbf[i] = di_cbf
                 
                 state.update_com(a_cbf, di_cbf)
+                D = np.hypot(s[0] - xc, s[1] - lane.eval(xc))
                 print(" a: ", a_cbf, " delta: ", di_cbf)
                 print(" v: ", v_, " old a: ", a_, " old delta: ", di)
             
@@ -710,15 +848,17 @@ def main():
                     plt.text(0, 25, "CBF Status: Triggered")
 
             if CBF_TYPE in [2, 4, 5]:
-                if(abs(a_cbf) > ZERO_TOL):
-                    plt.text(0, 30, "CBF a[m/s]:" + str(a_cbf)[:4])
-                else:
-                    plt.text(0, 30, "CBF a[m/s]: 0")
                 
-                if(abs(a_) > ZERO_TOL):
-                    plt.text(75, 30, "PID a[m/s]:" + str(a_)[:4])
-                else:
-                    plt.text(75, 30, "PID a[m/s]: 0")
+                if CBF_TYPE != 5:
+                    if(abs(a_cbf) > ZERO_TOL):
+                        plt.text(0, 30, "CBF a[m/s]:" + str(a_cbf)[:4])
+                    else:
+                        plt.text(0, 30, "CBF a[m/s]: 0")
+                    
+                    if(abs(a_) > ZERO_TOL):
+                        plt.text(75, 30, "PID a[m/s]:" + str(a_)[:4])
+                    else:
+                        plt.text(75, 30, "PID a[m/s]: 0")
 
                 if USE_CBF and (CBF_TYPE == 2):
                     plt.text(75, 25, "CBF Type: Ellipse|A")
@@ -737,6 +877,28 @@ def main():
                     plt.text(0, 25, "CBF Status: delta Triggered")
                 else:
                     plt.text(0, 25, "CBF Status: Dormant")
+            
+            if USE_CBF and (CBF_TYPE == 5):
+                if(abs(di_cbf) > ZERO_TOL):
+                    plt.text(0, 30, "CBF di[rad]:" + str(di_cbf)[:7])
+                else:
+                    plt.text(0, 30, "CBF di[rad]: 0")
+                
+                if(abs(di) > ZERO_TOL):
+                    plt.text(75, 30, "PID di[rad]:" + str(di)[:7])
+                else:
+                    plt.text(75, 30, "PID di[rad]: 0")
+                
+                if abs(D) > ZERO_TOL:
+                    plt.text(75, 20, "D: " + str(D)[:4])
+                else:
+                    plt.text(75, 20, "D: 0")
+                    
+                if CFORM:
+                    if abs(psi) > ZERO_TOL:
+                        plt.text(0, 35, "psi: " + str(psi)[:4])
+                    else:
+                        plt.text(0, 35, "psi: 0")
 
             plt.text(0, 20, "Gamma: " + str(gamma)[:4])            
             
@@ -778,9 +940,16 @@ def main():
                 
             if CBF_TYPE == 5:
                 res = 0.1
-                x_pts = np.linspace(0, 100, int(100/res))
+                x_start = 100
+                x_stop = 50
+                if np.max(x_lane_points) > x_start:
+                    x_start = np.max(x_lane_points)
+                if np.min(x_lane_points) < x_stop:
+                    x_stop = np.min(x_lane_points)
+                x_pts = np.linspace(x_start, x_stop, int(abs(x_stop - x_start)/res))
                 y_pts = lane.eval(x_pts)
                 plt.plot(x_pts, y_pts, '-g', label='lane')
+                plt.plot(x_lane_points, y_lane_points, 'ok', label='lane points')
             
             # Adding the velocity vector
             plt.quiver([state.x], 
