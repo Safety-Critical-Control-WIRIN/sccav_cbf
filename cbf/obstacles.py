@@ -24,6 +24,7 @@ from euclid import *
 from cvxopt import matrix
 from collections.abc import MutableMapping
 from numpy.polynomial.polynomial import Polynomial
+from sympy import Point
 
 from cbf.utils import vec_norm
 
@@ -194,14 +195,15 @@ class Ellipse2D(Obstacle2DBase):
 
     # f = evaluate
         
-    def f(self, p: Point2):
+    def f(self, **kwargs):
         """
         Alias of the evaluate function, semantically significant for cvxopt.
         """
-        return self.evaluate(p)
+        return self.evaluate(**kwargs)
     
-    def dx(self, p: Point2):
-        super().dx(p)
+    def dx(self, **kwargs):
+        p = Point2(self.s[0], self.s[1])
+        super().dx(**kwargs)
         xd = p.x - self.center.x
         yd = p.y - self.center.y
         ct = np.cos(self.theta)
@@ -210,8 +212,9 @@ class Ellipse2D(Obstacle2DBase):
         dx_ = (2 * ct/(self.a**2)) * ( xd * ct + yd * st ) + (-2 * st/(self.b**2)) * ( -xd * st + yd * ct )
         return dx_
     
-    def dy(self, p: Point2):
-        super().dy(p)
+    def dy(self, **kwargs):
+        p = Point2(self.s[0], self.s[1])
+        super().dy(**kwargs)
         xd = p.x - self.center.x
         yd = p.y - self.center.y
         ct = np.cos(self.theta)
@@ -220,23 +223,32 @@ class Ellipse2D(Obstacle2DBase):
         dy_ = (2 * st/(self.a**2)) * ( xd * ct + yd * st ) + (2 * ct/(self.b**2)) * ( -xd * st + yd * ct )
         return dy_
 
-    def dv(self, p: Point2):
+    def dv(self, **kwargs):
         """
         Despite being zero. This function is still created for the sake of completeness w.r.t API.
         """
-        return super().dy(p)
+        return super().dy(**kwargs)
     
-    def update(self, a: float=None, b: float=None, center: float=None, theta: float=None, buffer: float=None):
-        if a is not None:
-            self.a = a
-        if b is not None:
-            self.b = b
-        if center is not None:
-            if not isinstance(center, Vector2):
-                raise TypeError("Expected an object of type euclid.Vector2 for arg center.")
+    def update(self, s: matrix=None, s_obs: matrix=None, center: float=None, buffer: float=None, **kwargs):
+        
+        if 'a' in kwargs.keys():
+            self.a = kwargs['a']
+            
+        if 'b' in kwargs.keys():
+            self.a = kwargs['b']
+            
+        if 'theta' in kwargs.keys():
+            self.theta = kwargs['theta']
+        
+        if s_obs is not None:
+            center = Point2(s_obs[0], s_obs[1])
             self.center = center
-        if theta is not None:
-            self.theta = theta
+        
+        if s is not None:
+            self.s = s
+            self.vel = s[3]
+            self.theta = s[2]
+        
         if buffer is not None:
             if self.BUFFER_FLAG:
                 self.a = self.a - self.buffer + buffer
@@ -246,13 +258,10 @@ class Ellipse2D(Obstacle2DBase):
                 self.buffer = buffer
     
     def update_coords(self, xy: Point2):
-        super().update_coords(xy)
         self.center = xy
     
-    def update_state(self, xy: Point2, theta: float, v: Vector2):
-        self.update_coords(xy)
-        self.vel = v
-        self.theta = theta
+    def update_state(self, s: matrix, s_obs: matrix, **kwargs):
+        self.update(s=s, s_obs=s_obs)
     
     def update_velocity_by_magnitude(self, v: float):
         """
@@ -286,14 +295,15 @@ class Ellipse2D(Obstacle2DBase):
         theta = bbox.rotation.yaw
         self.update(a=a, b=b, center=center, theta=theta)
 
-    def dtheta(self, p: Point2):
+    def dtheta(self, *kwargs):
         """
         Despite being zero. This function is still created for the sake of completeness w.r.t API.
         """
-        return super().dtheta(p)
+        return super().dtheta(**kwargs)
     
-    def dt(self, p: Point2):
-        super().dt(p)
+    def dt(self, **kwargs):
+        p = Point2(self.s[0], self.s[1])
+        super().dt(**kwargs)
         xd = p.x - self.center.x
         yd = p.y - self.center.y
 
@@ -708,7 +718,7 @@ class ObstacleList2D(MutableMapping):
             # for key in rm_keys:
             #     self.pop(key)
 
-    def f(self, **kwargs) -> float:
+    def f(self, *args, **kwargs) -> float:
         f = matrix(0.0, (len(self.mapping), 1))
         idx = 0
         for obs in self.mapping.values():
@@ -716,7 +726,7 @@ class ObstacleList2D(MutableMapping):
             idx = idx + 1
         return f
 
-    def dx(self, **kwargs) -> float:
+    def dx(self, *args, **kwargs) -> float:
         dx = matrix(0.0, (len(self.mapping), 1))
         idx = 0
         for obs in self.mapping.values():
@@ -724,7 +734,7 @@ class ObstacleList2D(MutableMapping):
             idx = idx + 1
         return dx
 
-    def dy(self, **kwargs) -> float:
+    def dy(self, *args, **kwargs) -> float:
         dy = matrix(0.0, (len(self.mapping), 1))
         idx = 0
         for obs in self.mapping.values():
@@ -732,7 +742,7 @@ class ObstacleList2D(MutableMapping):
             idx = idx + 1
         return dy
     
-    def dtheta(self, **kwargs) -> float:
+    def dtheta(self, *args, **kwargs) -> float:
         dtheta = matrix(0.0, (len(self.mapping), 1))
         idx = 0
         for obs in self.mapping.values():
@@ -740,7 +750,7 @@ class ObstacleList2D(MutableMapping):
             idx = idx + 1
         return dtheta
     
-    def dv(self, **kwargs) -> float:
+    def dv(self, *args, **kwargs) -> float:
         dv = matrix(0.0, (len(self.mapping), 1))
         idx = 0
         for obs in self.mapping.values():
@@ -748,7 +758,7 @@ class ObstacleList2D(MutableMapping):
             idx = idx + 1
         return dv
     
-    def dt(self, **kwargs) -> float:
+    def dt(self, *args, **kwargs) -> float:
         dt = matrix(0.0, (len(self.mapping), 1))
         idx = 0
         for obs in self.mapping.values():
@@ -756,7 +766,7 @@ class ObstacleList2D(MutableMapping):
             idx = idx + 1
         return dt
 
-    def gradient(self, **kwargs) -> float:
+    def gradient(self, *args, **kwargs) -> float:
         df = matrix(0.0, (len(self.mapping), 3))
         idx = 0
         for obs in self.mapping.values():
