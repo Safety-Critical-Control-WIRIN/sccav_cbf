@@ -130,10 +130,15 @@ class DBM_CBF_2DS():
         self.__R = matrix(np.eye(2))
         pass
 
-    def update_state(self, p, v, theta):
-        self.__p = p
-        self.__theta = theta
-        self.__v = v
+    def update_state(self, s: matrix=None, s_obs: matrix=None, buffer: float=None, **kwargs):
+        self.s = s
+        self.s_obs = s_obs
+        self.__p = Point2(s[0], s[1])
+        self.__theta = s[2]
+        self.__v = s[3]
+        
+        for obstacle in self.obstacle_list2d.items():
+            obstacle.update(s=s, s_obs=s_obs, buffer=buffer, **kwargs)
     
     def set_alpha(self, alpha=1.0):
         self.__alpha = alpha
@@ -182,13 +187,13 @@ class DBM_CBF_2DS():
             f_c = matrix([ self.__v * np.cos(self.__theta), self.__v * np.sin(self.__theta), 0, 0], (4, 1))
 
             # G => Gradient, Gh -> (m,3)
-            Gh = matrix([ [self.obstacle_list2d.dx(self.__p)], [self.obstacle_list2d.dy(self.__p)],\
-                 [self.obstacle_list2d.dtheta(self.__p)], [self.obstacle_list2d.dv(self.__p)] ])
+            Gh = matrix([ [self.obstacle_list2d.dx()], [self.obstacle_list2d.dy()],\
+                 [self.obstacle_list2d.dtheta()], [self.obstacle_list2d.dv()] ])
             
             Lxg_h = Gh * g_c
             Lxf_h = Gh * f_c
 
-            f[1:] = -( Lxf_h + Lxg_h * x + ( self.__alpha * self.obstacle_list2d.f(self.__p) )  + self.obstacle_list2d.dt(self.__p))
+            f[1:] = -( Lxf_h + Lxg_h * x + ( self.__alpha * self.obstacle_list2d.f() )  + self.obstacle_list2d.dt())
             Df[1:, :] = -Lxg_h
 
             if z is None: return f, Df

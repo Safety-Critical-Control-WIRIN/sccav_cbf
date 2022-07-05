@@ -11,6 +11,7 @@ author: Neelaksh Singh
 # Removal of the following method for Type Hinting Enclosing
 # classes is possible. Be cautious about the changes.
 from __future__ import annotations
+from multiprocessing.sharedctypes import Value
 
 import sys
 import os
@@ -309,7 +310,6 @@ class Ellipse2D(Obstacle2DBase):
 
         dt_ = -2 * ( (xd/self.a**2) * self.vel.x + (yd/self.b**2) * self.vel.y )
         return dt_
-
     
     @classmethod
     def from_bounding_box(cls, bbox = BoundingBox(), buffer = 0.5) -> Ellipse2D:
@@ -562,12 +562,15 @@ class PolyLane(Obstacle2DBase):
         Alias of the evaluate function, semantically significant for cvxopt.
         
         Parameters:
+        ----------
             \**kwargs: See below
         
         Keyword Parameters:
+        ------------------
             x (np.ndarray): Array of data points to be evaluated
 
         Returns:
+        -------
             np.ndarray : Array of f(x) values
         """
         x = kwargs['x']
@@ -651,6 +654,105 @@ class PolyLane(Obstacle2DBase):
     
     # dtheta, dv and dt are zero, so we can let them be the defaults from base class.
     
+    
+    def update_coeffs_by_curve_fit(self,
+                                   x_pts: np.ndarray, 
+                                   y_pts: np.ndarray, 
+                                   n: int = 3,
+                                   x_fixed_pts: np.ndarray = None,
+                                   y_fixed_pts: np.ndarray = None,
+                                   fixed_pts_idx: np.ndarray = None,
+                                   alpha: float = 0.01,
+                                   sigma: np.ndarray = None,
+                                   initial_coeffs: np.ndarray = None):
+        
+        self.update_coeffs(self.fit_polynomial_curve(x_pts,
+                                                     y_pts,
+                                                     n = n,
+                                                     x_fixed_pts = x_fixed_pts,
+                                                     y_fixed_pts = y_fixed_pts,
+                                                     fixed_pts_idx = fixed_pts_idx,
+                                                     alpha = alpha,
+                                                     sigma = sigma,
+                                                     initial_coeffs = initial_coeffs))
+        
+    @classmethod
+    def fit_polynomial_curve(x_pts: np.ndarray, 
+                             y_pts: np.ndarray, 
+                             n: int = 3,
+                             x_fixed_pts: np.ndarray = None,
+                             y_fixed_pts: np.ndarray = None,
+                             fixed_pts_idx: np.ndarray = None,
+                             alpha: float = 0.01,
+                             sigma: np.ndarray = None,
+                             initial_coeffs: np.ndarray = None):
+        
+        x_pts = np.asarray(x_pts).flatten()
+        y_pts = np.asarray(y_pts).flatten()
+        
+        if x_pts.size != y_pts.size:
+            raise ValueError("Incompatible array sizes for x points and y points. \
+                             Received: ", x_pts.shape, " and ", y_pts.shape)
+        
+        if sigma is not None:
+            sigma = sigma
+        else:
+            sigma = np.zeros_like(x_pts)
+        
+        if x_fixed_pts is None and y_fixed_pts is not None:
+            raise ValueError("Both fixed point arrays have to be specified. \
+                             Received empty x fixed points.")
+        elif x_fixed_pts is not None and y_fixed_pts is None:
+            raise ValueError("Both fixed point arrays have to be specified. \
+                             Received empty y fixed points.")
+        else:
+            x_fixed_pts = np.asarray(x_fixed_pts).flatten()
+            y_fixed_pts = np.asarray(y_fixed_pts).flatten()
+            x_pts = np.append(x_pts, x_fixed_pts)
+            y_pts = np.append(y_pts, y_fixed_pts)
+            sigma = np.append(sigma, alpha*np.ones_like(x_fixed_pts))
+        
+        if fixed_pts_idx is not None:
+            sigma[fixed_pts_idx] = alpha
+        
+        if initial_coeffs is None:
+            initial_coefficients = initial_coeffs
+        else:
+            initial_coefficients = np.zeros(n + 1)
+            
+        # Using the scipy curve fit function to fit the curve
+        
+        def func(x, *p):
+            return Polynomial(p)(x)
+        
+        new_coeffs, _ = sci.optimize.curve_fit(func, 
+                                               x_pts, 
+                                               y_pts, 
+                                               initial_coefficients, 
+                                               sigma = sigma)
+        return new_coeffs
+        
+    @classmethod
+    def update_coeffs_by_curve_fit(cls,
+                                   x_pts: np.ndarray, 
+                                   y_pts: np.ndarray, 
+                                   n: int = 3,
+                                   x_fixed_pts: np.ndarray = None,
+                                   y_fixed_pts: np.ndarray = None,
+                                   fixed_pts_idx: np.ndarray = None,
+                                   alpha: float = 0.01,
+                                   sigma: np.ndarray = None,
+                                   initial_coeffs: np.ndarray = None):
+        
+        return cls(PolyLane.fit_polynomial_curve(x_pts,
+                                                 y_pts,
+                                                 n = n,
+                                                 x_fixed_pts = x_fixed_pts,
+                                                 y_fixed_pts = y_fixed_pts,
+                                                 fixed_pts_idx = fixed_pts_idx,
+                                                 alpha = alpha,
+                                                 sigma = sigma,
+                                                 initial_coeffs = initial_coeffs))
     
         
 class ObstacleList2D(MutableMapping):
