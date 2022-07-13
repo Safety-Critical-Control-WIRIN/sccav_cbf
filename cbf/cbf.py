@@ -137,7 +137,7 @@ class DBM_CBF_2DS():
         self.__theta = s[2]
         self.__v = s[3]
         
-        for obstacle in self.obstacle_list2d.items():
+        for obstacle in self.obstacle_list2d.values():
             obstacle.update(s=s, s_obs=s_obs, buffer=buffer, **kwargs)
     
     def set_alpha(self, alpha=1.0):
@@ -151,6 +151,13 @@ class DBM_CBF_2DS():
         self.__R = matrix(R)
         if not (self.__R.size[0] == self.__R.size[1] or self.__R.size[0] == 2):
             raise ValueError("Expected a symmetrix matrix of size 2 as input. Please check the value of the matrix R you are using.")
+        
+    def gc(self, *args, **kwargs):
+        return matrix([ [0, 0, 0, 1],\
+                 [-self.__v * np.sin(self.__theta), self.__v * np.cos(self.__theta), self.__v/self.__lr, 0] ])
+        
+    def fc(self, *args, **kwargs):
+        return matrix([ self.__v * np.cos(self.__theta), self.__v * np.sin(self.__theta), 0, 0], (4, 1))
 
     def solve_cbf(self, u_ref, return_solver = False):
         """
@@ -181,10 +188,9 @@ class DBM_CBF_2DS():
             Df[0, :] = 2 * (x - u_ref).T * self.__R
 
             # State Equation:
-            g_c = matrix([ [0, 0, 0, 1],\
-                 [-self.__v * np.sin(self.__theta), self.__v * np.cos(self.__theta), self.__v/self.__lr, 0] ])
+            g_c = self.gc()
 
-            f_c = matrix([ self.__v * np.cos(self.__theta), self.__v * np.sin(self.__theta), 0, 0], (4, 1))
+            f_c = self.fc()
 
             # G => Gradient, Gh -> (m,3)
             Gh = matrix([ [self.obstacle_list2d.dx()], [self.obstacle_list2d.dy()],\

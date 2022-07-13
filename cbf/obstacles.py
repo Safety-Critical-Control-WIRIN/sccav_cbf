@@ -312,15 +312,18 @@ class Ellipse2D(Obstacle2DBase):
         return dt_
     
     @classmethod
-    def from_bounding_box(cls, bbox = BoundingBox(), buffer = 0.5) -> Ellipse2D:
+    def from_bounding_box(cls, bbox = BoundingBox(), buffer = 0.5, **kwargs) -> Ellipse2D:
         if not isinstance(bbox, BoundingBox):
             raise TypeError("Expected an object of type cbf.obstacles.BoundingBox as an input to fromBoundingBox() method, but got ", type(bbox).__name__)
+        
+        if 'id' in kwargs.keys():
+            id = kwargs['id']
         
         a = bbox.extent.x
         b = bbox.extent.y
         center = Vector2(bbox.location.x, bbox.location.y)
         theta = bbox.rotation.yaw
-        return cls(a, b, center, theta, buffer)
+        return cls(a, b, center, theta, buffer, id=id)
     
 class CollisionCone2D(Obstacle2DBase):
     """
@@ -357,18 +360,19 @@ class CollisionCone2D(Obstacle2DBase):
         self.v_rel = matrix([ self.s_vx - self.s_obs_vx, self.s_vy - self.s_obs_vy])
         self.dist = vec_norm(self.p_rel)
         self.v_rel_norm = vec_norm(self.v_rel)
-        self.cone_boundary = 0
+        self.cone_boundary = ZERO_TOL
         
-        if (self.dist - self.a) >= 0:
+        if abs(self.dist) > abs(self.a):
             self.cone_boundary = np.sqrt(self.dist**2 - self.a**2) + ZERO_TOL
         
         if self.dist > ZERO_TOL:
             self.cos_phi = self.cone_boundary/self.dist
         else:
-            self.cos_phi = np.pi/2
+            self.cos_phi = 0
         
     def __repr__(self):
-        return f"{type(self).__name__}(a = {self.a}, b = {self.b}, center = {self.center}, theta = {self.theta}, buffer = {self.buffer}, buffer_applied: {self.BUFFER_FLAG} )\n"
+        return f"{type(self).__name__}(a = {self.a}, cone_boundary = {self.cone_boundary}, apex = {np.arccos(self.cos_phi)}, buffer = {self.buffer}, buffer_applied: {self.BUFFER_FLAG} )\n \
+            s_obs = {self.s_obs.T}"
     
     def apply_buffer(self):
         if not self.BUFFER_FLAG:
@@ -425,14 +429,14 @@ class CollisionCone2D(Obstacle2DBase):
     def dv(self, **kwargs):
         
         q_dv = (self.s[0] - self.cx) * np.cos(self.s[2]) + (self.s[1] - self.cy) * np.sin(self.s[2])
-        phi_term_dv = ( (self.s_vx - self.s_obs_vx)*np.cos(self.s[2]) + (self.s_vy - self.s_obs_vy)*np.sin(self.s[2]) ) * self.cone_boundary/self.v_rel_norm
+        phi_term_dv = ( (self.s_vx - self.s_obs_vx)*np.cos(self.s[2]) + (self.s_vy - self.s_obs_vy)*np.sin(self.s[2]) ) * self.cone_boundary/(self.v_rel_norm + ZERO_TOL)
         dv_ = q_dv + phi_term_dv
         return dv_
     
     def dtheta(self, **kwargs):
         
         q_dtheta = - (self.s[0] - self.cx) * self.s_vy + (self.s[1] - self.cy) * self.s_vx
-        phi_term_dtheta = ( -(self.s_vx - self.s_obs_vx)*self.s_vy + (self.s_vy - self.s_obs_vy)*self.s_vx ) * self.cone_boundary/self.v_rel_norm
+        phi_term_dtheta = ( -(self.s_vx - self.s_obs_vx)*self.s_vy + (self.s_vy - self.s_obs_vy)*self.s_vx ) * self.cone_boundary/(self.v_rel_norm + ZERO_TOL)
         dtheta_ = q_dtheta + phi_term_dtheta
         return dtheta_
     
@@ -459,19 +463,22 @@ class CollisionCone2D(Obstacle2DBase):
         
         self.cx = self.s_obs[0]
         self.cy = self.s_obs[1]
-        self.s_vx = s[3]*np.cos(s[2])
-        self.s_vy = s[3]*np.sin(s[2])
-        self.s_obs_vx = s_obs[3]*np.cos(s_obs[2])
-        self.s_obs_vy = s_obs[3]*np.sin(s_obs[2])
+        self.s_vx = self.s[3]*np.cos(self.s[2])
+        self.s_vy = self.s[3]*np.sin(self.s[2])
+        self.s_obs_vx = self.s_obs[3]*np.cos(self.s_obs[2])
+        self.s_obs_vy = self.s_obs[3]*np.sin(self.s_obs[2])
         self.p_rel = self.s[:2] - self.s_obs[:2]
         self.v_rel = matrix([ self.s_vx - self.s_obs_vx, self.s_vy - self.s_obs_vy])
         self.dist = vec_norm(self.p_rel)
         self.v_rel_norm = vec_norm(self.v_rel)
-        self.cone_boundary = np.sqrt(self.dist**2 - self.a**2) + ZERO_TOL
+        if abs(self.dist) > abs(self.a):
+            self.cone_boundary = np.sqrt(self.dist**2 - self.a**2) + ZERO_TOL
+        else:
+            self.cone_boundary = ZERO_TOL
         if self.dist > ZERO_TOL:
             self.cos_phi = self.cone_boundary/self.dist
         else:
-            self.cos_phi = np.pi/2
+            self.cos_phi = 0
     
     def update_state(self, s: matrix, s_obs: matrix, **kwargs):
         self.update(s=s, s_obs=s_obs)
@@ -804,9 +811,9 @@ class ObstacleList2D(MutableMapping):
                     self.mapping[key].update_by_bounding_box(bbox)
                 else:
                     if obs_type == Obstacle2DTypes.ELLIPSE2D:
-                        self.__setitem__(key, Ellipse2D.from_bounding_box(bbox, buffer, id=key))
+                        self.__setitem__(key, Ellipse2D.from_bounding_box(bbox=bbox, buffer=buffer, id=key))
                     if obs_type == Obstacle2DTypes.COLLISION_CONE2D:
-                        self.__setitem__(key, CollisionCone2D.from_bounding_box(bbox, buffer, id=key))
+                        self.__setitem__(key, CollisionCone2D.from_bounding_box(bbox=bbox, buffer=buffer, id=key))
             
             # rm_keys = []
             # for key in self.mapping.keys():
