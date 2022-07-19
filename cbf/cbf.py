@@ -44,22 +44,22 @@ class KBM_VC_CBF2D():
 
     def __init__(self, alpha = 1.0):
         self.obstacle_list2d = ObstacleList2D()
-        self.__alpha = alpha
-        self.__R = matrix(np.eye(2))
+        self._alpha = alpha
+        self._R = matrix(np.eye(2))
         pass
     
     def update_state(self, p, theta):
-        self.__p = p
-        self.__theta = theta
+        self._p = p
+        self._theta = theta
     
     def set_alpha(self, alpha=1.0):
-        self.__alpha = alpha
+        self._alpha = alpha
     
     def set_model_params(self, L):
-        self.__L = L
+        self._L = L
     
     def set_qp_cost_weight(self, R):
-        self.__R = matrix(R)
+        self._R = matrix(R)
     
     def solve_cbf(self, u_ref):
         """
@@ -69,7 +69,7 @@ class KBM_VC_CBF2D():
         m = len(self.obstacle_list2d) # No. of non-linear constraints
         n = 2 # dimension of x0 => u0
         u_ref = matrix(u_ref)
-        u_ref[1] = u_ref[0] * np.tan(u_ref[1])/self.__L
+        u_ref[1] = u_ref[0] * np.tan(u_ref[1])/self._L
 
         if len(self.obstacle_list2d) < 1:
             raise ValueError("Cannot solve CBF for an empty obstacle list. \
@@ -85,16 +85,16 @@ class KBM_VC_CBF2D():
             f = matrix(0.0, (m+1, 1))
             Df = matrix(0.0, (m+1, n))
 
-            f[0] = (x - u_ref).T * self.__R * (x - u_ref)
-            Df[0, :] = 2 * (x - u_ref).T * self.__R
+            f[0] = (x - u_ref).T * self._R * (x - u_ref)
+            Df[0, :] = 2 * (x - u_ref).T * self._R
 
-            gc = matrix([ [np.cos(self.__theta), np.sin(self.__theta), 0], [0, 0, 1] ])
+            gc = matrix([ [np.cos(self._theta), np.sin(self._theta), 0], [0, 0, 1] ])
             # G => Gradient, Gh -> (m,3)
-            Gh = matrix([ [self.obstacle_list2d.dx(self.__p)], [self.obstacle_list2d.dy(self.__p)], [self.obstacle_list2d.dtheta(self.__p)] ])
+            Gh = matrix([ [self.obstacle_list2d.dx(self._p)], [self.obstacle_list2d.dy(self._p)], [self.obstacle_list2d.dtheta(self._p)] ])
             
             Lxg_h = Gh * gc
 
-            f[1:] = -( Lxg_h * x + ( self.__alpha * self.obstacle_list2d.f(self.__p) ) )
+            f[1:] = -( Lxg_h * x + ( self._alpha * self.obstacle_list2d.f(self._p) ) )
             Df[1:, :] = -Lxg_h
 
             if z is None: return f, Df
@@ -103,7 +103,7 @@ class KBM_VC_CBF2D():
         
         solver_op = solvers.cp(F)
         u = solver_op['x']
-        u[1] = np.arctan2(u[1] * self.__L, u_ref[0])
+        u[1] = np.arctan2(u[1] * self._L, u_ref[0])
         return solver_op, u
 
 class DBM_CBF_2DS():
@@ -124,41 +124,41 @@ class DBM_CBF_2DS():
     """
     def __init__(self, alpha = 1.0):
         self.obstacle_list2d = ObstacleList2D()
-        self.__alpha = alpha
-        self.__p = Point2()
-        self.__v = 0
-        self.__theta = 0
-        self.__R = matrix(np.eye(2))
+        self._alpha = alpha
+        self._p = Point2()
+        self._v = 0
+        self._theta = 0
+        self._R = matrix(np.eye(2))
         pass
 
     def update_state(self, s: matrix, s_obs_dict: dict=None, buffer: float=None, **kwargs):
         
         self.s = s
         self.s_obs_dict = s_obs_dict
-        self.__p = Point2(s[0], s[1])
-        self.__theta = s[2]
-        self.__v = s[3]
+        self._p = Point2(s[0], s[1])
+        self._theta = s[2]
+        self._v = s[3]
         
         self.obstacle_list2d.update_state(s = s, s_obs_dict = self.s_obs_dict, buffer=buffer)
     
     def set_alpha(self, alpha=1.0):
-        self.__alpha = alpha
+        self._alpha = alpha
     
     def set_model_params(self, lr, lf):
-        self.__lr = lr
-        self.__lf = lf
+        self._lr = lr
+        self._lf = lf
     
     def set_qp_cost_weight(self, R):
-        self.__R = matrix(R)
-        if not (self.__R.size[0] == self.__R.size[1] or self.__R.size[0] == 2):
+        self._R = matrix(R)
+        if not (self._R.size[0] == self._R.size[1] or self._R.size[0] == 2):
             raise ValueError("Expected a symmetrix matrix of size 2 as input. Please check the value of the matrix R you are using.")
         
     def gc(self, *args, **kwargs):
         return matrix([ [0, 0, 0, 1],\
-                 [-self.__v * np.sin(self.__theta), self.__v * np.cos(self.__theta), self.__v/self.__lr, 0] ])
+                 [-self._v * np.sin(self._theta), self._v * np.cos(self._theta), self._v/self._lr, 0] ])
         
     def fc(self, *args, **kwargs):
-        return matrix([ self.__v * np.cos(self.__theta), self.__v * np.sin(self.__theta), 0, 0], (4, 1))
+        return matrix([ self._v * np.cos(self._theta), self._v * np.sin(self._theta), 0, 0], (4, 1))
 
     def solve_cbf(self, u_ref, return_solver = False):
         """
@@ -169,7 +169,7 @@ class DBM_CBF_2DS():
         n = 2 # dimension of x0 => u0
         u_ref = matrix(u_ref)
         # delta to beta
-        u_ref[1] = np.arctan2(self.__lr * np.tan(u_ref[1]), self.__lf + self.__lr)
+        u_ref[1] = np.arctan2(self._lr * np.tan(u_ref[1]), self._lf + self._lr)
 
         if len(self.obstacle_list2d) < 1:
             raise ValueError("Cannot solve CBF for an empty obstacle list. \
@@ -185,8 +185,8 @@ class DBM_CBF_2DS():
             f = matrix(0.0, (m+1, 1))
             Df = matrix(0.0, (m+1, n))
 
-            f[0] = (x - u_ref).T * self.__R * (x - u_ref)
-            Df[0, :] = 2 * (x - u_ref).T * self.__R
+            f[0] = (x - u_ref).T * self._R * (x - u_ref)
+            Df[0, :] = 2 * (x - u_ref).T * self._R
 
             # State Equation:
             g_c = self.gc()
@@ -200,17 +200,17 @@ class DBM_CBF_2DS():
             Lxg_h = Gh * g_c
             Lxf_h = Gh * f_c
 
-            f[1:] = -( Lxf_h + Lxg_h * x + ( self.__alpha * self.obstacle_list2d.f() )  + self.obstacle_list2d.dt())
+            f[1:] = -( Lxf_h + Lxg_h * x + ( self._alpha * self.obstacle_list2d.f() )  + self.obstacle_list2d.dt())
             Df[1:, :] = -Lxg_h
 
             if z is None: return f, Df
-            H = z[0] * 2 * self.__R
+            H = z[0] * 2 * self._R
             return f, Df, H
         
         solver_op = solvers.cp(F)
         u = solver_op['x']
         # beta to delta
-        u[1] = np.arctan2((self.__lf + self.__lr) * np.tan(u[1]), self.__lr)
+        u[1] = np.arctan2((self._lf + self._lr) * np.tan(u[1]), self._lr)
         if return_solver:
             return solver_op, u
         else:
@@ -237,17 +237,17 @@ class SADBM_CBF_2DS(DBM_CBF_2DS):
     """
     def __init__(self, alpha = 1.0, dt = 0.001):
         self.obstacle_list2d = ObstacleList2D()
-        self.__alpha = alpha
-        self.__p = Point2()
-        self.__v = 0
-        self.__theta = 0
-        self.__R = matrix(np.eye(2))
-        self.__DT_MODE_AUTO = 0
+        self._alpha = alpha
+        self._p = Point2()
+        self._v = 0
+        self._theta = 0
+        self._R = matrix(np.eye(2))
+        self._DT_MODE_AUTO = 0
         if dt is None:
-            self.__DT_MODE_AUTO = 1
-            self.__dt = 1e-6
+            self._DT_MODE_AUTO = 1
+            self._dt = 1e-6
         else:
-            self.__dt = dt
+            self._dt = dt
         self.t_last = time.time()
         self.beta_ref_last = None
         self.beta_last = None
@@ -260,12 +260,12 @@ class SADBM_CBF_2DS(DBM_CBF_2DS):
     def fc(self, *args, **kwargs):
         
         if self.beta_last is None:
-            self.__beta = 0
+            self._beta = 0
             
-        return matrix([ self.__v * np.cos(self.__theta + self.__beta), 
-                       self.__v * np.sin(self.__theta + self.__beta), 
-                       self.__v * np.sin(self.__beta)/self.__lr, 
-                       0, 0], (4, 1))
+        return matrix([ self._v * np.cos(self._theta + self._beta), 
+                       self._v * np.sin(self._theta + self._beta), 
+                       self._v * np.sin(self._beta)/self._lr, 
+                       0, 0], (5, 1))
     
     def solve_cbf(self, u_ref, return_solver = False):
         """
@@ -276,17 +276,17 @@ class SADBM_CBF_2DS(DBM_CBF_2DS):
         n = 2 # dimension of x0 => u0
         u_ref = matrix(u_ref)
         # delta to beta
-        u_ref[1] = np.arctan2(self.__lr * np.tan(u_ref[1]), self.__lf + self.__lr)
+        u_ref[1] = np.arctan2(self._lr * np.tan(u_ref[1]), self._lf + self._lr)
         
         self.t_current = time.time()
         
-        if self.__DT_MODE_AUTO:
-            self.__dt = self.t_current - self.t_last
+        if self._DT_MODE_AUTO:
+            self._dt = self.t_current - self.t_last
                 
         if self.beta_ref_last is None:
             self.beta_ref_dot = 0
         else:
-            self.beta_ref_dot = (u_ref[1] - self.beta_ref_last)/self.__dt
+            self.beta_ref_dot = (u_ref[1] - self.beta_ref_last)/self._dt
         
         # beta to d(beta)/dt as control i/p
         u_ref[1] = self.beta_ref_dot
@@ -305,8 +305,8 @@ class SADBM_CBF_2DS(DBM_CBF_2DS):
             f = matrix(0.0, (m+1, 1))
             Df = matrix(0.0, (m+1, n))
 
-            f[0] = (x - u_ref).T * self.__R * (x - u_ref)
-            Df[0, :] = 2 * (x - u_ref).T * self.__R
+            f[0] = (x - u_ref).T * self._R * (x - u_ref)
+            Df[0, :] = 2 * (x - u_ref).T * self._R
 
             # State Equation:
             g_c = self.gc()
@@ -320,27 +320,27 @@ class SADBM_CBF_2DS(DBM_CBF_2DS):
             Lxg_h = Gh * g_c
             Lxf_h = Gh * f_c
 
-            f[1:] = -( Lxf_h + Lxg_h * x + ( self.__alpha * self.obstacle_list2d.f() )  + self.obstacle_list2d.dt())
+            f[1:] = -( Lxf_h + Lxg_h * x + ( self._alpha * self.obstacle_list2d.f() )  + self.obstacle_list2d.dt())
             Df[1:, :] = -Lxg_h
 
             if z is None: return f, Df
-            H = z[0] * 2 * self.__R
+            H = z[0] * 2 * self._R
             return f, Df, H
         
         solver_op = solvers.cp(F)
         u = solver_op['x'] # contains a and d(beta)/dt
         
-        if self.__DT_MODE_AUTO:
-            self.__dt = self.t_current - self.t_last
+        if self._DT_MODE_AUTO:
+            self._dt = self.t_current - self.t_last
             
         # d(beta)/dt to beta for state and final control i/p
         if self.beta_last is None:
-            self.__beta = u[1] * self.__dt
+            self._beta = u[1] * self._dt
         else:
-            self.__beta += u[1] * self.__dt
+            self._beta += u[1] * self._dt
             
         # beta to delta
-        u[1] = np.arctan2((self.__lf + self.__lr) * np.tan(self.__beta), self.__lr)
+        u[1] = np.arctan2((self._lf + self._lr) * np.tan(self._beta), self._lr)
         
         self.t_last = time.time()
         if return_solver:

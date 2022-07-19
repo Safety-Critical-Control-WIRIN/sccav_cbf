@@ -27,6 +27,9 @@ import lane_cbf_test as lutils
 from cvxopt import matrix, solvers, spdiag, sqrt
 from euclid import *
 
+# Suppressing cvxopt output
+solvers.options['show_progress'] = False
+
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) +
                 "/PathPlanning/CubicSpline/")
 
@@ -36,7 +39,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)) +
 try:
     import cubic_spline_planner
     from cbf.obstacles import Ellipse2D, CollisionCone2D
-    from cbf.cbf import KBM_VC_CBF2D, DBM_CBF_2DS
+    from cbf.cbf import KBM_VC_CBF2D, DBM_CBF_2DS, SADBM_CBF_2DS
 except:
     raise
 
@@ -715,7 +718,7 @@ def main():
                 # delta_cbf[i] = di_cbf
                 
                 ## With Class ##
-                cbf_controller = DBM_CBF_2DS(alpha=gamma)
+                cbf_controller = SADBM_CBF_2DS(alpha=gamma, dt=None)
                 cbf_controller.set_model_params(lr=lr, lf=lf)
                 cbf_controller.obstacle_list2d.update({
                     0: CollisionCone2D(a_cone, s, s_obs)
