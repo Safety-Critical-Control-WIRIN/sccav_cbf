@@ -18,6 +18,8 @@ import numpy as np
 from cvxopt import matrix, solvers
 from euclid import *
 
+from cbf.utils import ZERO_TOL
+
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) +
                 "/../")
 
@@ -249,8 +251,8 @@ class SADBM_CBF_2DS(DBM_CBF_2DS):
         else:
             self._dt = dt
         self.t_last = time.time()
-        self.beta_ref_last = None
-        self.beta_last = None
+        self.beta_ref_last = 0.0
+        self._beta = 0.0
         pass
     
     def gc(self, *args, **kwargs):
@@ -258,9 +260,6 @@ class SADBM_CBF_2DS(DBM_CBF_2DS):
         return matrix([ [0, 0, 0, 1, 0], [0, 0, 0, 0, 1] ])
         
     def fc(self, *args, **kwargs):
-        
-        if self.beta_last is None:
-            self._beta = 0
             
         return matrix([ self._v * np.cos(self._theta + self._beta), 
                        self._v * np.sin(self._theta + self._beta), 
@@ -275,18 +274,19 @@ class SADBM_CBF_2DS(DBM_CBF_2DS):
         m = len(self.obstacle_list2d) # No. of non-linear constraints
         n = 2 # dimension of x0 => u0
         u_ref = matrix(u_ref)
+
         # delta to beta
         u_ref[1] = np.arctan2(self._lr * np.tan(u_ref[1]), self._lf + self._lr)
         
         self.t_current = time.time()
         
         if self._DT_MODE_AUTO:
-            self._dt = self.t_current - self.t_last
-                
-        if self.beta_ref_last is None:
-            self.beta_ref_dot = 0
-        else:
-            self.beta_ref_dot = (u_ref[1] - self.beta_ref_last)/self._dt
+            # Sometimes, dt becomes too low and results in a zero div error
+            self._dt = max(self.t_current - self.t_last, ZERO_TOL)
+        
+        self.beta_ref_dot = (u_ref[1] - self.beta_ref_last)/self._dt
+        
+        self.beta_ref_last = u_ref[1]
         
         # beta to d(beta)/dt as control i/p
         u_ref[1] = self.beta_ref_dot
@@ -330,14 +330,14 @@ class SADBM_CBF_2DS(DBM_CBF_2DS):
         solver_op = solvers.cp(F)
         u = solver_op['x'] # contains a and d(beta)/dt
         
+        # Line commented to avoid mismatch between unchanged ref i/p
+        # self.t_current = time.time()
         if self._DT_MODE_AUTO:
-            self._dt = self.t_current - self.t_last
+            self._dt = max(self.t_current - self.t_last, ZERO_TOL)
             
+        print("u before conversion: ", u)
         # d(beta)/dt to beta for state and final control i/p
-        if self.beta_last is None:
-            self._beta = u[1] * self._dt
-        else:
-            self._beta += u[1] * self._dt
+        self._beta += u[1] * self._dt
             
         # beta to delta
         u[1] = np.arctan2((self._lf + self._lr) * np.tan(self._beta), self._lr)

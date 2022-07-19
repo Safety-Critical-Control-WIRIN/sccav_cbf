@@ -1,5 +1,6 @@
 # Ignoring irrelevant directories
 test_scripts/temp
+temp
 carla_results
 
 # Video extensions
