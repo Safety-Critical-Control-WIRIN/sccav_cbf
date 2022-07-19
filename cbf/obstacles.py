@@ -121,8 +121,12 @@ class Obstacle2DBase():
     def dv(self, *args, **kwargs):
         return 0
     
+    def dbeta(self, *args, **kwargs):
+        return 0
+    
     def dt(self, *args, **kwargs):
         return 0
+    
     def update(self, *args, **kwargs):
         pass
 
@@ -891,6 +895,14 @@ class ObstacleList2D(MutableMapping):
             dt[idx] = obs.dt(**kwargs)
             idx = idx + 1
         return dt
+    
+    def dbeta(self, *args, **kwargs) -> float:
+        dbeta = matrix(0.0, (len(self.mapping), 1))
+        idx = 0
+        for obs in self.mapping.values():
+            dbeta[idx] = obs.dbeta(**kwargs)
+            idx = idx + 1
+        return dbeta
 
     def gradient(self, *args, **kwargs) -> float:
         df = matrix(0.0, (len(self.mapping), 3))
