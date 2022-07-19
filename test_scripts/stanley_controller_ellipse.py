@@ -604,7 +604,7 @@ def main():
     # FLAGS and IMP. CONSTANTS
     USE_CBF = True
     ZERO_TOL = 1e-3
-    CBF_TYPE = 5 # 0: Ellipse, 1: Distance, 2: Ellipse - Acceleration Controlled
+    CBF_TYPE = 4 # 0: Ellipse, 1: Distance, 2: Ellipse - Acceleration Controlled
                  # 3: Ellipse - API, 4: Collision Cone, 5: Lane Boundary
     a_max = 2.29 # m/s^2
     a_min = -2.29
@@ -721,7 +721,7 @@ def main():
                     0: CollisionCone2D(a_cone, s, s_obs)
                 })
                 p=Vector2(state.x, state.y)
-                cbf_controller.update_state(p, state.v, state.yaw)
+                cbf_controller.update_state(s=np.array([state.x, state.y, state.yaw, state.v]))
                 cbf_controller.set_qp_cost_weight(np.diag([0.5, 0.5]))
                 u = cbf_controller.solve_cbf(np.array([a_, di]))
                 a_cbf = u[0]

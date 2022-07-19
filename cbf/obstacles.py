@@ -835,7 +835,7 @@ class ObstacleList2D(MutableMapping):
     def update_state(self, s: matrix, s_obs_dict: dict=None, buffer: float=None, **kwargs):
         
         if s_obs_dict is None:                
-            for obstacle in self.obstacle_list2d.values():            
+            for obstacle in self.mapping.values():            
                 obstacle.update(s=s, s_obs=s_obs_dict, buffer=buffer, **kwargs)
         else:
             if isinstance(s_obs_dict, dict):
