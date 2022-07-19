@@ -15,6 +15,7 @@ from multiprocessing.sharedctypes import Value
 
 import sys
 import os
+from typing import Dict
 import warnings
 import enum
 
@@ -827,6 +828,22 @@ class ObstacleList2D(MutableMapping):
             # for key in rm_keys:
             #     self.pop(key)
 
+    def update_state(self, s: matrix, s_obs_dict: dict=None, buffer: float=None, **kwargs):
+        
+        if s_obs_dict is None:                
+            for obstacle in self.obstacle_list2d.values():            
+                obstacle.update(s=s, s_obs=s_obs_dict, buffer=buffer, **kwargs)
+        else:
+            if isinstance(s_obs_dict, dict):
+                for key in s_obs_dict.keys():
+                    if key in self.mapping.keys():
+                        self.mapping.update(s=s, s_obs=s_obs_dict[key], buffer=buffer, **kwargs)
+                    else:
+                        warnings.warn("Unknown key provided in s_obs_dict. Corresponsing key not found in the obstacle list.\
+                            key: {key}")
+            else:
+                ValueError("Expected dictionary for obstacle dictionary")
+    
     def f(self, *args, **kwargs) -> float:
         f = matrix(0.0, (len(self.mapping), 1))
         idx = 0

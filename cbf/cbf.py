@@ -130,15 +130,15 @@ class DBM_CBF_2DS():
         self.__R = matrix(np.eye(2))
         pass
 
-    def update_state(self, s: matrix=None, s_obs: matrix=None, buffer: float=None, **kwargs):
+    def update_state(self, s: matrix, s_obs_dict: dict=None, buffer: float=None, **kwargs):
+        
         self.s = s
-        self.s_obs = s_obs
+        self.s_obs_dict = s_obs_dict
         self.__p = Point2(s[0], s[1])
         self.__theta = s[2]
         self.__v = s[3]
         
-        for obstacle in self.obstacle_list2d.values():
-            obstacle.update(s=s, s_obs=s_obs, buffer=buffer, **kwargs)
+        self.obstacle_list2d.update_state(s = s, s_obs_dict = self.s_obs_dict, buffer=buffer)
     
     def set_alpha(self, alpha=1.0):
         self.__alpha = alpha
@@ -214,3 +214,4 @@ class DBM_CBF_2DS():
             return solver_op, u
         else:
             return u
+
