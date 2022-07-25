@@ -346,6 +346,11 @@ class CollisionCone2D(Obstacle2DBase):
         self.type = Obstacle2DTypes.COLLISION_CONE2D
         if 'id' in kwargs.keys():
             self.id = kwargs['id']
+            
+        if 'beta' in kwargs.keys():
+            self.beta = kwargs['beta']
+        else:
+            self.beta = 0.0
         
         self.s = s
         self.s_obs = s_obs
@@ -433,8 +438,8 @@ class CollisionCone2D(Obstacle2DBase):
 
     def dv(self, **kwargs):
         
-        q_dv = (self.s[0] - self.cx) * np.cos(self.s[2]) + (self.s[1] - self.cy) * np.sin(self.s[2])
-        phi_term_dv = ( (self.s_vx - self.s_obs_vx)*np.cos(self.s[2]) + (self.s_vy - self.s_obs_vy)*np.sin(self.s[2]) ) * self.cone_boundary/(self.v_rel_norm + ZERO_TOL)
+        q_dv = (self.s[0] - self.cx) * np.cos(self.s[2] + self.beta) + (self.s[1] - self.cy) * np.sin(self.s[2] + self.beta)
+        phi_term_dv = ( (self.s_vx - self.s_obs_vx)*np.cos(self.s[2] + self.beta) + (self.s_vy - self.s_obs_vy)*np.sin(self.s[2] + self.beta) ) * self.cone_boundary/(self.v_rel_norm + ZERO_TOL)
         dv_ = q_dv + phi_term_dv
         return dv_
     
@@ -451,6 +456,14 @@ class CollisionCone2D(Obstacle2DBase):
         phi_term_dt = -self.v_rel_norm * ( (self.s[0] - self.cx)*self.s_obs_vx + (self.s[1] - self.cy)*self.s_obs_vy )/(self.cone_boundary + ZERO_TOL)
         dt_ = q_dt + phi_term_dt
         return dt_
+    
+    def dbeta(self, **kwargs):
+        
+        # q_dbeta = -(self.s[0] - self.cx) * self.s_vy + (self.s[1] - self.cy) * self.s_vx
+        # phi_dbeta = ( -(self.s_vx - self.s_obs_vx) * self.s_vy + (self.s_vy - self.s_obs_vy) * self.s_vx ) * self.cone_boundary/(self.v_rel_norm + ZERO_TOL)
+        # dbeta_ = q_dbeta + phi_dbeta
+        dbeta_ = self.dtheta(**kwargs)
+        return dbeta_
 
     def update(self, s: matrix=None, s_obs: matrix=None, buffer: float=None, **kwargs):
         if 'a' in kwargs.keys():
@@ -466,12 +479,15 @@ class CollisionCone2D(Obstacle2DBase):
             else:
                 self.buffer = buffer
         
+        if 'beta' in kwargs.keys():
+            self.beta = kwargs['beta']
+        
         self.cx = self.s_obs[0]
         self.cy = self.s_obs[1]
         self.s_vx = self.s[3]*np.cos(self.s[2])
         self.s_vy = self.s[3]*np.sin(self.s[2])
-        self.s_obs_vx = self.s_obs[3]*np.cos(self.s_obs[2])
-        self.s_obs_vy = self.s_obs[3]*np.sin(self.s_obs[2])
+        self.s_obs_vx = self.s_obs[3]*np.cos(self.s_obs[2] + self.beta)
+        self.s_obs_vy = self.s_obs[3]*np.sin(self.s_obs[2] + self.beta)
         self.p_rel = self.s[:2] - self.s_obs[:2]
         self.v_rel = matrix([ self.s_vx - self.s_obs_vx, self.s_vy - self.s_obs_vy])
         self.dist = vec_norm(self.p_rel)

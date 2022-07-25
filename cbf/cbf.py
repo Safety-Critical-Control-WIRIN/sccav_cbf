@@ -17,6 +17,7 @@ import numpy as np
 
 from cvxopt import matrix, solvers
 from euclid import *
+from cbf.obstacles import Obstacle2DTypes
 
 from cbf.utils import ZERO_TOL
 
@@ -274,7 +275,7 @@ class SADBM_CBF_2DS(DBM_CBF_2DS):
         m = len(self.obstacle_list2d) # No. of non-linear constraints
         n = 2 # dimension of x0 => u0
         u_ref = matrix(u_ref)
-
+        print("delta ref before conversion: ", u_ref[1])
         # delta to beta
         u_ref[1] = np.arctan2(self._lr * np.tan(u_ref[1]), self._lf + self._lr)
         
@@ -287,9 +288,10 @@ class SADBM_CBF_2DS(DBM_CBF_2DS):
         self.beta_ref_dot = (u_ref[1] - self.beta_ref_last)/self._dt
         
         self.beta_ref_last = u_ref[1]
-        
+        print("beta ref before conversion: ", self.beta_ref_last)
         # beta to d(beta)/dt as control i/p
         u_ref[1] = self.beta_ref_dot
+        print("beta ref dot: ", self.beta_ref_dot)
             
         if len(self.obstacle_list2d) < 1:
             raise ValueError("Cannot solve CBF for an empty obstacle list. \
@@ -338,9 +340,16 @@ class SADBM_CBF_2DS(DBM_CBF_2DS):
         print("u before conversion: ", u)
         # d(beta)/dt to beta for state and final control i/p
         self._beta += u[1] * self._dt
+        print("beta CBF: ", self._beta)
+        
+        # We'll need to update each collision cone CBF to populate its beta.
+        for obstacle in self.obstacle_list2d.values():
+            if obstacle.type == Obstacle2DTypes.COLLISION_CONE2D:
+                obstacle.update(beta=self._beta)
             
         # beta to delta
         u[1] = np.arctan2((self._lf + self._lr) * np.tan(self._beta), self._lr)
+        print("delta CBF: ", u[1])
         
         self.t_last = time.time()
         if return_solver:
