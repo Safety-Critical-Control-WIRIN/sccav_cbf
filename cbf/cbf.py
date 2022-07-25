@@ -219,6 +219,85 @@ class DBM_CBF_2DS():
         else:
             return u
 
+class DUM_CBF_2DS(DBM_CBF_2DS):
+    """
+    A control barrier function QP for the dynamic unicycle bicycle model.
+
+    Details:
+    -------
+    Supported Obstacle State  : Static , Dynamic (except Ellipse)
+    Supported Obstacle Type(s): Ellipse2D, CollisionCone2D, PolyLine
+    
+    Observed Safety Actions  : Braking, Circumventing
+    
+    Solver Used       : CVXOPT.solvers.cp
+    Class K func used : alpha * h
+    """
+    
+    def gc(self, *args, **kwargs):
+        
+        return matrix([ [0, 0, 0, 1], [0, 0, 1, 0] ])
+        
+    def fc(self, *args, **kwargs):
+            
+        return matrix([ self._v * np.cos(self._theta), 
+                       self._v * np.sin(self._theta), 
+                       0, 0], (5, 1))
+        
+    def solve_cbf(self, u_ref, return_solver = False):
+        """
+        A CVXOPT function. Thus multi-dimensional arguments should strictly be
+        numpy arrays or cvxopt matrices.
+        """
+        m = len(self.obstacle_list2d) # No. of non-linear constraints
+        n = 2 # dimension of x0 => u0
+        u_ref = matrix(u_ref)
+
+        if len(self.obstacle_list2d) < 1:
+            raise ValueError("Cannot solve CBF for an empty obstacle list. \
+                Update the obstacle list so that it is non-empty in order  \
+                to move forward.")
+
+        def F(x = None, z=None):
+
+            # if x is None: return m, matrix(0.0, (n, 1))
+            if x is None: return m, u_ref
+
+            # for 1 objective function and 1 constraint and 3 state vars
+            f = matrix(0.0, (m+1, 1))
+            Df = matrix(0.0, (m+1, n))
+
+            f[0] = (x - u_ref).T * self._R * (x - u_ref)
+            Df[0, :] = 2 * (x - u_ref).T * self._R
+
+            # State Equation:
+            g_c = self.gc()
+
+            f_c = self.fc()
+
+            # G => Gradient, Gh -> (m,3)
+            Gh = matrix([ [self.obstacle_list2d.dx()], [self.obstacle_list2d.dy()],\
+                 [self.obstacle_list2d.dtheta()], [self.obstacle_list2d.dv()] ])
+            
+            Lxg_h = Gh * g_c
+            Lxf_h = Gh * f_c
+
+            f[1:] = -( Lxf_h + Lxg_h * x + ( self._alpha * self.obstacle_list2d.f() )  + self.obstacle_list2d.dt())
+            Df[1:, :] = -Lxg_h
+
+            if z is None: return f, Df
+            H = z[0] * 2 * self._R
+            return f, Df, H
+        
+        solver_op = solvers.cp(F)
+        u = solver_op['x']
+
+        if return_solver:
+            return solver_op, u
+        else:
+            return u
+
+
 class SADBM_CBF_2DS(DBM_CBF_2DS):
     """
     A control barrier function for state augmented - steer rate controlled dynamic
