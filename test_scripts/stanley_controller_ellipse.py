@@ -718,7 +718,8 @@ def main():
                 # delta_cbf[i] = di_cbf
                 
                 ## With Class ##
-                cbf_controller = SADBM_CBF_2DS(alpha=gamma, dt=None)
+                cbf_controller = DBM_CBF_2DS(alpha=gamma)
+                # cbf_controller = SADBM_CBF_2DS(alpha=gamma, dt=None)
                 cbf_controller.set_model_params(lr=lr, lf=lf)
                 cbf_controller.obstacle_list2d.update({
                     0: CollisionCone2D(a_cone, s, s_obs)
