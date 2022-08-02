@@ -38,7 +38,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)) +
 
 try:
     import cubic_spline_planner
-    from cbf.obstacles import Ellipse2D, CollisionCone2D
+    from cbf.obstacles import Ellipse2D, CollisionCone2D, PolyLane
     from cbf.cbf import KBM_VC_CBF2D, DBM_CBF_2DS, SADBM_CBF_2DS
 except:
     raise
@@ -607,7 +607,7 @@ def main():
     # FLAGS and IMP. CONSTANTS
     USE_CBF = True
     ZERO_TOL = 1e-3
-    CBF_TYPE = 4 # 0: Ellipse, 1: Distance, 2: Ellipse - Acceleration Controlled
+    CBF_TYPE = 5 # 0: Ellipse, 1: Distance, 2: Ellipse - Acceleration Controlled
                  # 3: Ellipse - API, 4: Collision Cone, 5: Lane Boundary
     a_max = 2.29 # m/s^2
     a_min = -2.29
@@ -753,36 +753,59 @@ def main():
                 # y_lane_points = np.array([[-25.0, -30.0, -35.0]])
                 
                 ### 4 ###
-                # x_lane_points = np.array([[60.0, 80.0, 100.0, 120.0]])
-                # y_lane_points = np.array([[-30.0, -30.0, -30.0, -20.0]])
+                x_lane_points = np.array([[60.0, 80.0, 100.0, 120.0]])
+                y_lane_points = np.array([[-30.0, -30.0, -30.0, -20.0]])
                 
                 ### 5 ###
-                x_lane_points = np.array([[60.0, 70.0, 80.0, 90.0, 100.0, 110.0]])
-                y_lane_points = np.array([[-30.0, -30.0, -35.0, -25.0, -30.0, -25.0]])
+                # x_lane_points = np.array([[60.0, 70.0, 80.0, 90.0, 100.0, 110.0]])
+                # y_lane_points = np.array([[-30.0, -30.0, -35.0, -25.0, -30.0, -25.0]])
                 
-                lane = lutils.PolynomialLaneCurve.lsq_curve(x_lane_points,
-                                                            y_lane_points,
-                                                            n = 5)
+                # lane = lutils.PolynomialLaneCurve.lsq_curve(x_lane_points,
+                #                                             y_lane_points,
+                #                                             n = 5)
                 
-                ## Without Class ##
-                beta_ = np.arctan2(lr * np.tan(di), lf + lr)
-                u_des = np.array([a_, beta_])
-                s = np.array([ state.x, state.y, state.yaw, state.v ])
+                # ## Without Class ##
+                # beta_ = np.arctan2(lr * np.tan(di), lf + lr)
+                # u_des = np.array([a_, beta_])
+                # s = np.array([ state.x, state.y, state.yaw, state.v ])
                 
-                u, xc = CBF_lane(s, lane, u_des, buffer=0.0, alpha=gamma)
+                # u, xc = CBF_lane(s, lane, u_des, buffer=0.0, alpha=gamma)
                 # u, xc = CBF_lane_sqrt(s, lane, u_des, buffer=1.0, alpha=gamma)
                 # u, xc, psi = CBF_lane_cf(s, lane, u_des, buffer=100.0, alpha=gamma)
                 # u, xc, psi = CBF_lane_cf_sqrt(s, lane, u_des, buffer=1.0, alpha=gamma)
-                CFORM = False
                 
                 # a_cbf = saturation(u[0], a_min, a_max)
+                # a_cbf = u[0]
+                # beta_cbf = u[1]
+                # di_cbf = np.arctan2((lf + lr)*np.tan(beta_cbf), lr)
+                # delta_cbf[i] = di_cbf
+                
+                # D = np.hypot(s[0] - xc, s[1] - lane.eval(xc))
+                
+                # To use this flag, uncomment the statements containing psi, it can't be used without them.
+                CFORM = False
+                
+                ## With Class ##
+                s = np.array([ state.x, state.y, state.yaw, state.v ])
+                
+                lane = PolyLane.fit_polynomial_curve(x_lane_points, y_lane_points, n = 3)
+                lane_coeffs = lane.coeffs
+                cbf_controller = DBM_CBF_2DS(alpha=gamma)
+                # cbf_controller = SADBM_CBF_2DS(alpha=gamma, dt=None)
+                cbf_controller.set_model_params(lr=lr, lf=lf)
+                cbf_controller.obstacle_list2d.update({
+                    0: PolyLane(coefficients = lane_coeffs, s=s)
+                })
+                
+                cbf_controller.update_state(s=np.array([state.x, state.y, state.yaw, state.v]))
+                cbf_controller.set_qp_cost_weight(np.diag([0.5, 0.5]))
+                u = cbf_controller.solve_cbf(np.array([a_, di]))
                 a_cbf = u[0]
-                beta_cbf = u[1]
-                di_cbf = np.arctan2((lf + lr)*np.tan(beta_cbf), lr)
+                di_cbf = u[1]
                 delta_cbf[i] = di_cbf
                 
                 state.update_com(a_cbf, di_cbf)
-                D = np.hypot(s[0] - xc, s[1] - lane.eval(xc))
+                D = np.hypot(s[0] - lane.cx, s[1] - lane.evaluate_polynomial(x = lane.cx))
                 print(" a: ", a_cbf, " delta: ", di_cbf)
                 print(" v: ", v_, " old a: ", a_, " old delta: ", di)
             
@@ -898,11 +921,11 @@ def main():
                 else:
                     plt.text(75, 20, "D: 0")
                     
-                if CFORM:
-                    if abs(psi) > ZERO_TOL:
-                        plt.text(0, 35, "psi: " + str(psi)[:4])
-                    else:
-                        plt.text(0, 35, "psi: 0")
+                # if CFORM:
+                #     if abs(psi) > ZERO_TOL:
+                #         plt.text(0, 35, "psi: " + str(psi)[:4])
+                #     else:
+                #         plt.text(0, 35, "psi: 0")
 
             plt.text(0, 20, "Gamma: " + str(gamma)[:4])            
             
@@ -951,7 +974,9 @@ def main():
                 if np.min(x_lane_points) < x_stop:
                     x_stop = np.min(x_lane_points)
                 x_pts = np.linspace(x_start, x_stop, int(abs(x_stop - x_start)/res))
-                y_pts = lane.eval(x_pts)
+                # y_pts = lane.eval(x_pts)
+                y_pts = lane.evaluate_polynomial(x = x_pts)
+                
                 plt.plot(x_pts, y_pts, '-g', label='lane')
                 plt.plot(x_lane_points, y_lane_points, 'ok', label='lane points')
             

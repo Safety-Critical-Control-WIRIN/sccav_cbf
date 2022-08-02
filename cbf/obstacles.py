@@ -20,7 +20,7 @@ import warnings
 import enum
 
 import numpy as np
-import scipy as sci
+import scipy.optimize as sciopt
 
 from euclid import *
 from cvxopt import matrix
@@ -544,13 +544,36 @@ class CollisionCone2D(Obstacle2DBase):
     
 class PolyLane(Obstacle2DBase):
     
-    def __init__(self, coefficients: np.ndarray, **kwargs):
-        
+    def __init__(self,
+                 coefficients: np.ndarray,
+                 s: matrix = matrix(0, (4, 1)),
+                 s_obs: matrix = matrix(0, (4, 1)),
+                 buffer: float = 1.50,
+                 **kwargs):
+
         if 'id' in kwargs.keys():
             self.id = kwargs['id']
-        
+
+        if 'beta' in kwargs.keys():
+            self.beta = kwargs['beta']
+        else:
+            self.beta = 0.0
+
         self.type = Obstacle2DTypes.POLY_LANE
         self.update_coeffs(coefficients)
+        self.s = matrix(s)
+        self.s_obs = matrix(s_obs)
+        self.buffer = buffer
+
+        self.cx = self.get_shortest_distance_x(Point2(self.s[0], self.s[1]), x0=self.s[0])
+        self.g = self._polynomial(self.cx)
+        # Note: g is g(x) = cy. Shortest dist pt. is (cx, cy)
+        self.dg = self._d1_polynomial(self.cx)
+        self.ddg = self._d2_polynomial(self.cx)
+        self.eta = 1 + self.dg * self.ddg + self.dg ** 2 - self.s[1] * self.ddg
+
+        if abs(self.eta) < ZERO_TOL:
+            self.eta = ZERO_TOL
         
     def update_coeffs(self, coefficients: np.ndarray):
         """Update the equation coefficients. Note that this may end
@@ -568,42 +591,31 @@ class PolyLane(Obstacle2DBase):
         self._d1_polynomial = self._polynomial.deriv(m=1)
         self._d2_polynomial = self._polynomial.deriv(m=2)
         self.order = int(coefficients.size - 1)
-    
-    def evaluate(self, **kwargs):
+        
+    def evaluate_polynomial(self, x: np.ndarray, **kwargs):
         """Evaluate the value of the polynomial f(x) at one or more
         points.
 
         Parameters:
-            \**kwargs: See below
-        
-        Keyword Parameters:
             x (np.ndarray): Array of data points to be evaluated
 
         Returns:
             np.ndarray : Array of f(x) values
         """
-        x = kwargs['x']
         return self._polynomial(x)
+    
+    def evaluate(self, **kwargs):
+        """Evaluate the value of the CBF (Euclidean Distance) at the
+        current set of states.
+        """
+        eval = (self.cx - self.s[0])**2 + (self.g - self.s[1])**2 - self.buffer
+        return eval
     
     def f(self, **kwargs):
         r"""
         Alias of the evaluate function, semantically significant for cvxopt.
-        
-        Parameters:
-        ----------
-            \**kwargs: See below
-        
-        Keyword Parameters:
-        ------------------
-            x (np.ndarray): Array of data points to be evaluated
-
-        Returns:
-        -------
-            np.ndarray : Array of f(x) values
         """
-        x = kwargs['x']
-        if np.isscalar(x):
-            return self.evaluate(x)
+        return self.evaluate()        
         
     def update(self, s: matrix=None, s_obs: matrix=None, buffer: float=None, **kwargs):
         if s is not None:
@@ -611,13 +623,9 @@ class PolyLane(Obstacle2DBase):
         if s_obs is not None:
             self.s_obs = matrix(s_obs)
         if buffer is not None:
-            if self.BUFFER_FLAG:
-                self.a = self.a - self.buffer + buffer
-                self.buffer = buffer
-            else:
-                self.buffer = buffer
+            self.buffer = buffer
         
-        self.cx = self.get_shortest_distance_x(Point2(self.s[0], self.s[1]), x0 = s[0])
+        self.cx = self.get_shortest_distance_x(Point2(self.s[0], self.s[1]), x0 = self.s[0])
         self.g = self._polynomial(self.cx)
         # Note: g is g(x) = cy. Shortest dist pt. is (cx, cy)
         self.dg = self._d1_polynomial(self.cx)
@@ -664,7 +672,7 @@ class PolyLane(Obstacle2DBase):
             ddf = self._d2_polynomial(x)
             return 2*(1 + df**2 + f * ddf - p.y * df)
         
-        res = sci.optimize.minimize(g, x0, method='Newton-CG',
+        res = sciopt.minimize(g, x0, method='Newton-CG',
                                     jac = dg, hess = ddg,
                                     options = options)
         
@@ -677,7 +685,7 @@ class PolyLane(Obstacle2DBase):
     
     def dy(self, **kwargs):
         
-        dy_ = ( 2/self.eta ) * ( -(self.s[0] - self.cx) * self.dg - (self.s[1] - self.g) * (self.eta - self.dg**2) )
+        dy_ = ( 2/self.eta ) * ( -(self.s[0] - self.cx) * self.dg + (self.s[1] - self.g) * (self.eta - self.dg**2) )
         return dy_
     
     # dtheta, dv and dt are zero, so we can let them be the defaults from base class.
@@ -705,7 +713,8 @@ class PolyLane(Obstacle2DBase):
                                                      initial_coeffs = initial_coeffs))
         
     @classmethod
-    def fit_polynomial_curve(x_pts: np.ndarray, 
+    def fit_polynomial_curve(cls,
+                             x_pts: np.ndarray,
                              y_pts: np.ndarray, 
                              n: int = 3,
                              x_fixed_pts: np.ndarray = None,
@@ -726,13 +735,16 @@ class PolyLane(Obstacle2DBase):
             sigma = sigma
         else:
             sigma = np.zeros_like(x_pts)
-        
+            sigma[:] = 10.0
+
         if x_fixed_pts is None and y_fixed_pts is not None:
             raise ValueError("Both fixed point arrays have to be specified. \
                              Received empty x fixed points.")
         elif x_fixed_pts is not None and y_fixed_pts is None:
             raise ValueError("Both fixed point arrays have to be specified. \
                              Received empty y fixed points.")
+        elif x_fixed_pts is None and y_fixed_pts is None:
+            pass
         else:
             x_fixed_pts = np.asarray(x_fixed_pts).flatten()
             y_fixed_pts = np.asarray(y_fixed_pts).flatten()
@@ -743,7 +755,7 @@ class PolyLane(Obstacle2DBase):
         if fixed_pts_idx is not None:
             sigma[fixed_pts_idx] = alpha
         
-        if initial_coeffs is None:
+        if initial_coeffs is not None:
             initial_coefficients = initial_coeffs
         else:
             initial_coefficients = np.zeros(n + 1)
@@ -753,35 +765,35 @@ class PolyLane(Obstacle2DBase):
         def func(x, *p):
             return Polynomial(p)(x)
         
-        new_coeffs, _ = sci.optimize.curve_fit(func, 
-                                               x_pts, 
-                                               y_pts, 
-                                               initial_coefficients, 
-                                               sigma = sigma)
-        return new_coeffs
+        new_coeffs, _ = sciopt.curve_fit(func,
+                                      x_pts,
+                                      y_pts,
+                                      initial_coefficients,
+                                      sigma = sigma)
+        return cls(new_coeffs)
         
-    @classmethod
-    def update_coeffs_by_curve_fit(cls,
-                                   x_pts: np.ndarray, 
-                                   y_pts: np.ndarray, 
-                                   n: int = 3,
-                                   x_fixed_pts: np.ndarray = None,
-                                   y_fixed_pts: np.ndarray = None,
-                                   fixed_pts_idx: np.ndarray = None,
-                                   alpha: float = 0.01,
-                                   sigma: np.ndarray = None,
-                                   initial_coeffs: np.ndarray = None):
+    # @classmethod
+    # def update_coeffs_by_curve_fit(cls,
+    #                                x_pts: np.ndarray,
+    #                                y_pts: np.ndarray,
+    #                                n: int = 3,
+    #                                x_fixed_pts: np.ndarray = None,
+    #                                y_fixed_pts: np.ndarray = None,
+    #                                fixed_pts_idx: np.ndarray = None,
+    #                                alpha: float = 0.01,
+    #                                sigma: np.ndarray = None,
+    #                                initial_coeffs: np.ndarray = None):
+    #
+    #     return cls(PolyLane.fit_polynomial_curve(x_pts=x_pts,
+    #                                              y_pts=y_pts,
+    #                                              n = n,
+    #                                              x_fixed_pts = x_fixed_pts,
+    #                                              y_fixed_pts = y_fixed_pts,
+    #                                              fixed_pts_idx = fixed_pts_idx,
+    #                                              alpha = alpha,
+    #                                              sigma = sigma,
+    #                                              initial_coeffs = initial_coeffs))
         
-        return cls(PolyLane.fit_polynomial_curve(x_pts,
-                                                 y_pts,
-                                                 n = n,
-                                                 x_fixed_pts = x_fixed_pts,
-                                                 y_fixed_pts = y_fixed_pts,
-                                                 fixed_pts_idx = fixed_pts_idx,
-                                                 alpha = alpha,
-                                                 sigma = sigma,
-                                                 initial_coeffs = initial_coeffs))
-    
         
 class ObstacleList2D(MutableMapping):
 
