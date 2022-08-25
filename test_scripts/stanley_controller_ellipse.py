@@ -26,6 +26,10 @@ import matplotlib.patches as patches
 import lane_cbf_test as lutils
 from cvxopt import matrix, solvers, spdiag, sqrt
 from euclid import *
+from scipy.io import savemat
+
+# Setting matplotlib to render Tex for latin symbols
+# plt.rcParams['text.usetex'] = True
 
 # Suppressing cvxopt output
 solvers.options['show_progress'] = False
@@ -123,6 +127,7 @@ class State(object):
         self.y += (self.v * np.sin(self.yaw) + self.v * np.cos(self.yaw) * beta) * _dt
         self.yaw += (self.v * beta/lr) * _dt
         self.v += acceleration * _dt
+        self.beta = beta
 
 
 
@@ -607,7 +612,7 @@ def main():
     # FLAGS and IMP. CONSTANTS
     USE_CBF = True
     ZERO_TOL = 1e-3
-    CBF_TYPE = 5 # 0: Ellipse, 1: Distance, 2: Ellipse - Acceleration Controlled
+    CBF_TYPE = 4 # 0: Ellipse, 1: Distance, 2: Ellipse - Acceleration Controlled
                  # 3: Ellipse - API, 4: Collision Cone, 5: Lane Boundary
     a_max = 2.29 # m/s^2
     a_min = -2.29
@@ -616,6 +621,7 @@ def main():
     fnames = []
     delta_stanley = np.zeros(int(max_simulation_time/dt) + 1)
     delta_cbf = np.zeros_like(delta_stanley)
+    beta_history = np.array([0.0])
     while max_simulation_time >= time and last_idx > target_idx:
         # We will assume that the velocity control based CBF is modifying the
         # target velocity.
@@ -733,6 +739,7 @@ def main():
                 delta_cbf[i] = di_cbf
                 
                 state.update_com(a_cbf, di_cbf)
+                beta_history = np.append(beta_history, state.beta)
                 print(" a: ", a_cbf, " delta: ", di_cbf)
                 print(" v: ", v_, " old a: ", a_, " old delta: ", di)
                 
@@ -1027,11 +1034,11 @@ def main():
         plt.axis("equal")
         plt.grid(True)
 
-        plt.subplots(1)
-        plt.plot(t, [iv * 3.6 for iv in v], "-r")
-        plt.xlabel("Time[s]")
-        plt.ylabel("Speed[km/h]")
-        plt.grid(True)
+        # plt.subplots(1)
+        # plt.plot(t, [iv * 3.6 for iv in v], "-r")
+        # plt.xlabel("Time[s]")
+        # plt.ylabel("Speed[km/h]")
+        # plt.grid(True)
 
         if CBF_TYPE in [0, 1, 3]:
             plt.figure(4)
@@ -1040,6 +1047,17 @@ def main():
             plt.ylabel("CBF Modification in delta[rad]")
             plt.grid(True)
             plt.show()
+        
+        savemat("beta_vs_time.mat", {
+            "t_arr": t,
+            "beta_deg": beta_history*RAD_TO_DEG,
+        })
+                
+        plt.figure(3)
+        plt.plot(t, beta_history*RAD_TO_DEG, "-k", label=r"beta", linewidth=1.5)
+        plt.xlabel("Time[s]")
+        plt.ylabel("beta(deg)")
+        plt.show()
 
 if __name__ == '__main__':
     main()
