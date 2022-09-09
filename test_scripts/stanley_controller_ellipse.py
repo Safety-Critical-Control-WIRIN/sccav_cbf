@@ -30,6 +30,7 @@ from scipy.io import savemat
 
 # Setting matplotlib to render Tex for latin symbols
 # plt.rcParams['text.usetex'] = True
+plt.rcParams["figure.figsize"] = (2.5, 2.5)
 
 # Suppressing cvxopt output
 solvers.options['show_progress'] = False
@@ -600,6 +601,7 @@ def main():
     yaw = [state.yaw]
     v = [state.v]
     t = [0.0]
+    prev_target_idx = 0
     target_idx, _ = calc_target_index(state, cx, cy)
 
     # Elliptical Obstacle on Track
@@ -608,6 +610,9 @@ def main():
     obs_idx = int(last_idx*0.75) # Obstacle on 75% of the trajectory
     o_cx = cx[obs_idx]
     o_cy = cy[obs_idx]
+    
+    ## Indexes for Graph grid snapshots.
+    grid_idx = (np.linspace(0.0, 1.0, 9)*last_idx).astype(int)
 
     # FLAGS and IMP. CONSTANTS
     USE_CBF = True
@@ -627,6 +632,7 @@ def main():
         # target velocity.
         v_ = target_speed
         ai = pid_control(target_speed, state.v)
+        prev_target_idx = target_idx
         di, target_idx = stanley_control(state, cx, cy, cyaw, target_idx)
         delta_stanley[i] = di
 
@@ -842,104 +848,104 @@ def main():
             # for stopping simulation with the esc key.
             plt.gcf().canvas.mpl_connect('key_release_event',
                     lambda event: [exit(0) if event.key == 'escape' else None])
-            plt.plot(cx, cy, ".r", label="course")
-            plt.plot(x, y, "-b", label="trajectory")
+            plt.plot(cx, cy, "-r", label="course", lw=1.2)
+            plt.plot(x, y, "-b", label="trajectory", lw=1)
             plt.plot(cx[target_idx], cy[target_idx], "xg", label="target")
             plt.axis("equal")
-            plt.grid(True)
-            plt.xlabel("x[m]")
-            plt.ylabel("y[m]")
-            plt.legend(loc='lower left')
+            # plt.grid(True)
+            # plt.xlabel("x[m]")
+            # plt.ylabel("y[m]")
+            # plt.legend(loc='lower left')
 
-            if(abs(state.v) > ZERO_TOL):
-                plt.title("Speed[m/s]:" + str(state.v)[:4])
-            else:
-                plt.title("Speed[m/s]: 0")
+            # if(abs(state.v) > ZERO_TOL):
+            #     plt.title("Speed[m/s]:" + str(state.v)[:4])
+            # else:
+            #     plt.title("Speed[m/s]: 0")
                         
-            if CBF_TYPE in [0, 1, 3]:
-                if(abs(v_cbf) > ZERO_TOL):
-                    plt.text(0, 30, "CBF V[m/s]:" + str(v_cbf)[:4])
-                else:
-                    plt.text(0, 30, "CBF V[m/s]: 0")
+            # if CBF_TYPE in [0, 1, 3]:
+            #     if(abs(v_cbf) > ZERO_TOL):
+            #         plt.text(0, 30, "CBF V[m/s]:" + str(v_cbf)[:4])
+            #     else:
+            #         plt.text(0, 30, "CBF V[m/s]: 0")
                 
-                if(abs(target_speed) > ZERO_TOL):
-                    plt.text(75, 30, "Planner V[m/s]:" + str(target_speed)[:4])
-                else:
-                    plt.text(75, 30, "Planner V[m/s]: 0")
+            #     if(abs(target_speed) > ZERO_TOL):
+            #         plt.text(75, 30, "Planner V[m/s]:" + str(target_speed)[:4])
+            #     else:
+            #         plt.text(75, 30, "Planner V[m/s]: 0")
                 
-                if USE_CBF and (CBF_TYPE == 0):
-                    plt.text(75, 25, "CBF Type: Ellipse")
-                if USE_CBF and (CBF_TYPE == 1):
-                    plt.text(75, 25, "CBF Type: Distance")
-                if USE_CBF and (CBF_TYPE == 3):
-                    plt.text(75, 25, "CBF Type: Ellipse (API)")
+            #     if USE_CBF and (CBF_TYPE == 0):
+            #         plt.text(75, 25, "CBF Type: Ellipse")
+            #     if USE_CBF and (CBF_TYPE == 1):
+            #         plt.text(75, 25, "CBF Type: Distance")
+            #     if USE_CBF and (CBF_TYPE == 3):
+            #         plt.text(75, 25, "CBF Type: Ellipse (API)")
 
-                if abs(v_cbf - target_speed) < ZERO_TOL:
-                    cbf_active = False
-                    plt.text(0, 25, "CBF Status: Dormant")
-                else:
-                    cbf_active = True
-                    plt.text(0, 25, "CBF Status: Triggered")
+            #     if abs(v_cbf - target_speed) < ZERO_TOL:
+            #         cbf_active = False
+            #         plt.text(0, 25, "CBF Status: Dormant")
+            #     else:
+            #         cbf_active = True
+            #         plt.text(0, 25, "CBF Status: Triggered")
 
-            if CBF_TYPE in [2, 4, 5]:
+            # if CBF_TYPE in [2, 4, 5]:
                 
-                if CBF_TYPE != 5:
-                    if(abs(a_cbf) > ZERO_TOL):
-                        plt.text(0, 30, "CBF a[m/s]:" + str(a_cbf)[:4])
-                    else:
-                        plt.text(0, 30, "CBF a[m/s]: 0")
+            #     if CBF_TYPE != 5:
+            #         if(abs(a_cbf) > ZERO_TOL):
+            #             plt.text(0, 30, "CBF a[m/s]:" + str(a_cbf)[:4])
+            #         else:
+            #             plt.text(0, 30, "CBF a[m/s]: 0")
                     
-                    if(abs(a_) > ZERO_TOL):
-                        plt.text(75, 30, "PID a[m/s]:" + str(a_)[:4])
-                    else:
-                        plt.text(75, 30, "PID a[m/s]: 0")
+            #         if(abs(a_) > ZERO_TOL):
+            #             plt.text(75, 30, "PID a[m/s]:" + str(a_)[:4])
+            #         else:
+            #             plt.text(75, 30, "PID a[m/s]: 0")
 
-                if USE_CBF and (CBF_TYPE == 2):
-                    plt.text(75, 25, "CBF Type: Ellipse|A")
-                if USE_CBF and (CBF_TYPE == 4):
-                    plt.text(75, 25, "CBF Type: Cone|A")
-                if USE_CBF and (CBF_TYPE == 5):
-                    plt.text(75, 25, "CBF Type: Lane|A")
+            #     if USE_CBF and (CBF_TYPE == 2):
+            #         plt.text(75, 25, "CBF Type: Ellipse|A")
+            #     if USE_CBF and (CBF_TYPE == 4):
+            #         plt.text(75, 25, "CBF Type: Cone|A")
+            #     if USE_CBF and (CBF_TYPE == 5):
+            #         plt.text(75, 25, "CBF Type: Lane|A")
 
-                trig_flag_a = abs(a_cbf - a_) >= ZERO_TOL
-                trig_flag_d = abs(di_cbf - di) >= ZERO_TOL
-                if trig_flag_a and trig_flag_d:
-                    plt.text(0, 25, "CBF Status: a, delta Triggered")
-                elif trig_flag_a: 
-                    plt.text(0, 25, "CBF Status: a Triggered")
-                elif trig_flag_d:
-                    plt.text(0, 25, "CBF Status: delta Triggered")
-                else:
-                    plt.text(0, 25, "CBF Status: Dormant")
+            #     trig_flag_a = abs(a_cbf - a_) >= ZERO_TOL
+            #     trig_flag_d = abs(di_cbf - di) >= ZERO_TOL
+            #     if trig_flag_a and trig_flag_d:
+            #         plt.text(0, 25, "CBF Status: a, delta Triggered")
+            #     elif trig_flag_a: 
+            #         plt.text(0, 25, "CBF Status: a Triggered")
+            #     elif trig_flag_d:
+            #         plt.text(0, 25, "CBF Status: delta Triggered")
+            #     else:
+            #         plt.text(0, 25, "CBF Status: Dormant")
             
-            if USE_CBF and (CBF_TYPE == 5):
-                if(abs(di_cbf) > ZERO_TOL):
-                    plt.text(0, 30, "CBF di[rad]:" + str(di_cbf)[:7])
-                else:
-                    plt.text(0, 30, "CBF di[rad]: 0")
+            # if USE_CBF and (CBF_TYPE == 5):
+            #     if(abs(di_cbf) > ZERO_TOL):
+            #         plt.text(0, 30, "CBF di[rad]:" + str(di_cbf)[:7])
+            #     else:
+            #         plt.text(0, 30, "CBF di[rad]: 0")
                 
-                if(abs(di) > ZERO_TOL):
-                    plt.text(75, 30, "PID di[rad]:" + str(di)[:7])
-                else:
-                    plt.text(75, 30, "PID di[rad]: 0")
+            #     if(abs(di) > ZERO_TOL):
+            #         plt.text(75, 30, "PID di[rad]:" + str(di)[:7])
+            #     else:
+            #         plt.text(75, 30, "PID di[rad]: 0")
                 
-                if abs(D) > ZERO_TOL:
-                    plt.text(75, 20, "D: " + str(D)[:4])
-                else:
-                    plt.text(75, 20, "D: 0")
+            #     if abs(D) > ZERO_TOL:
+            #         plt.text(75, 20, "D: " + str(D)[:4])
+            #     else:
+            #         plt.text(75, 20, "D: 0")
                     
-                # if CFORM:
-                #     if abs(psi) > ZERO_TOL:
-                #         plt.text(0, 35, "psi: " + str(psi)[:4])
-                #     else:
-                #         plt.text(0, 35, "psi: 0")
+            #     # if CFORM:
+            #     #     if abs(psi) > ZERO_TOL:
+            #     #         plt.text(0, 35, "psi: " + str(psi)[:4])
+            #     #     else:
+            #     #         plt.text(0, 35, "psi: 0")
 
-            plt.text(0, 20, "Gamma: " + str(gamma)[:4])            
+            # plt.text(0, 20, "Gamma: " + str(gamma)[:4])            
             
             if CBF_TYPE in [1, 2, 3, 4]:
                 ax = plt.gca()
-                obs_ellipse = patches.Ellipse(xy=(o_cx, o_cy), width=a, height=b, ec='b', fc=(0,1,0,0.5), lw=2, ls='-.')
-                obs_dist_circle = patches.Circle(xy=(o_cx, o_cy), radius=Ds, ls='--', lw=2, ec='k', fc=(0,1,0,0))
+                obs_ellipse = patches.Ellipse(xy=(o_cx, o_cy), width=a, height=b, ec='b', fc=(0,1,0,0.5), lw=1.2, ls='-.')
+                obs_dist_circle = patches.Circle(xy=(o_cx, o_cy), radius=Ds, ls='--', lw=1.2, ec='k', fc=(0,1,0,0))
                 dist = np.hypot(state.x - o_cx, state.y - o_cy)
                 
                 if (dist > ZERO_TOL) and ((dist**2 - a_cone**2) > 0):
@@ -963,7 +969,7 @@ def main():
                                             theta1 = theta1,
                                             theta2 = theta2,
                                             linestyle='-.',
-                                            linewidth=1.5,
+                                            linewidth=1.2,
                                             fill = True,
                                             facecolor = 'pink',
                                             alpha = 0.3,
@@ -1004,6 +1010,15 @@ def main():
             i = i + 1
             fnames.append(fname)
             plt.savefig(fname)
+            
+            # saving momentary snapshots for the grid
+            _temp_mask_1 = grid_idx > prev_target_idx
+            _temp_mask_2 = grid_idx > target_idx
+            _temp_mask_3 = _temp_mask_1 == _temp_mask_2
+            if False in _temp_mask_3 or target_idx in grid_idx:
+                fname2 = os.getcwd() + "\\pyplt_grid_fig\\grd_{0}.png".format(i)
+                plt.savefig(fname2)
+            
         
     delta_diff = delta_cbf - delta_stanley
     # zero padding
