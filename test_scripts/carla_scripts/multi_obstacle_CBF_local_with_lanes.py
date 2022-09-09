@@ -57,10 +57,10 @@ except:
     raise
 
 # from __ import bbox
-IMG_WIDTH = 1920
-IMG_HEIGHT = 1080
+IMG_WIDTH = 1280
+IMG_HEIGHT = 720
 DEGREE_TO_RADIANS = math.pi / 180
-CASE = 9
+CASE = 1
 
 # Suppressing the cvxopt solver output
 solvers.options['show_progress'] = False
@@ -191,10 +191,10 @@ def main():
     try:
         m = world.get_map()
         start_pose = random.choice(m.get_spawn_points())
-        start_pose.location.x = 101.6
-        start_pose.location.y = -20
+        start_pose.location.x = -95.0
+        start_pose.location.y = 14.4
         start_pose.location.z = 0.1
-        start_pose.rotation.yaw = 90
+        start_pose.rotation.yaw = 0
 
         blueprint_library = world.get_blueprint_library()
 
@@ -274,7 +274,7 @@ def main():
         lane1 = []
         resolution = 100
         for t in np.linspace(-95.0, 0, resolution):
-            lane1.append((t,17.4))
+            lane1.append((t,19.4))
 
         lane1 = np.array(lane1)
         lane_obstacle_1 = PolyLane.fit_polynomial_curve(x_pts=lane1[:, 0],
@@ -288,11 +288,12 @@ def main():
         lane2 = []
         resolution = 100
         for t in np.linspace(-95.0, 0, resolution):
-            lane2.append((t,13.4))
+            lane2.append((t,10.4))
         lane2 = np.array(lane2)
         lane_obstacle_2 = PolyLane.fit_polynomial_curve(x_pts=lane2[:, 0],
                                                         y_pts=lane2[:, 1],
                                                         n=1)
+        polylane2 = [lane2[:, 0], lane_obstacle_2.evaluate_polynomial(lane2[:, 0])]
         lane_obstacles['lane2'] = lane_obstacle_2
         lane_obstacles_coeff['lane2'] = lane_obstacle_2.coeffs
 
@@ -301,9 +302,9 @@ def main():
         """Specifying the scenario"""
         map_range = 30
         if CASE == 1:
-            start_pose.location.x = 102.6
-            start_pose.location.y = 30
-            start_pose.rotation.yaw = 90
+            start_pose.location.x = -40.0
+            start_pose.location.y = 15.4
+            start_pose.rotation.yaw = 0
             obstacle1 = world.spawn_actor(
                 random.choice(blueprint_library.filter('vehicle.audi.etron')),
                 start_pose)
@@ -311,13 +312,13 @@ def main():
             actor_list.append(obstacle1)
 
             """Defining the trajectory"""
-            start_x = 102.6  # [m]
-            start_y = 87.5  # [m]
-            start_yaw = np.radians(90)  # [rad]
+            start_x = -95.0  # [m]
+            start_y = 15.4  # [m]
+            start_yaw = np.radians(0)  # [rad]
 
-            end_x = 62.4  # [m]
-            end_y = 134.0  # [m]
-            end_yaw = np.radians(180)  # [rad]
+            end_x = 0  # [m]
+            end_y = 15.4  # [m]
+            end_yaw = np.radians(0)  # [rad]
             offset = 3.0
             resolution = 100
             velocity = 20
@@ -326,8 +327,8 @@ def main():
             # curve = bezier.get_trajectory(velocity=velocity)
 
             straight1 = []
-            for t in np.linspace(-30, 100, resolution):
-                straight1.append((102.6, t, math.pi / 2, velocity))
+            for t in np.linspace(start_x, end_x, resolution):
+                straight1.append((t, 15.4, 0, velocity))
 
             # straight2 = []
             # for t in np.linspace(62.4, 12.0, resolution):
@@ -336,7 +337,7 @@ def main():
             trajectory = straight1
 
         elif CASE == 2:
-            start_pose.location.x = 101.6
+            start_pose.location.x = 99.6
             start_pose.location.y = 50
             start_pose.rotation.yaw = 90
             obstacle1 = world.spawn_actor(
@@ -454,7 +455,7 @@ def main():
         elif CASE == 6:
             map_range = 30
             start_pose.location.x = 101.1
-            start_pose.location.y = 30
+            start_pose.location.y = 10
             start_pose.rotation.yaw = 90
             obstacle1 = world.spawn_actor(
                 random.choice(blueprint_library.filter('vehicle.audi.etron')),
@@ -463,7 +464,7 @@ def main():
             actor_list.append(obstacle1)
 
             start_pose.location.x = 103.1
-            start_pose.location.y = 40
+            start_pose.location.y = 20
             start_pose.rotation.yaw = 90
             obstacle2 = world.spawn_actor(
                 random.choice(blueprint_library.filter('vehicle.audi.etron')),
@@ -482,7 +483,7 @@ def main():
             trajectory = straight1
 
         elif CASE == 7:
-            map_range = 30
+            map_range = 50
             start_pose.location.x = 101.1
             start_pose.location.y = 60
             start_pose.rotation.yaw = 90
@@ -541,7 +542,7 @@ def main():
         elif CASE == 8:
             map_range = 30
             start_pose.location.x = 100
-            start_pose.location.y = 20
+            start_pose.location.y = 10
             start_pose.rotation.yaw = 0
             obstacle2 = world.spawn_actor(
                 random.choice(blueprint_library.filter('walker.*')),
@@ -549,7 +550,7 @@ def main():
             actor_list.append(obstacle2)
 
             start_pose.location.x = 80
-            start_pose.location.y = 30
+            start_pose.location.y = 12
             start_pose.rotation.yaw = 0
             obstacle1 = world.spawn_actor(
                 random.choice(blueprint_library.filter('vehicle.audi.etron')),
@@ -600,12 +601,12 @@ def main():
         elif CASE == 10:
             map_range = 30
             start_pose.location.x = 92
-            start_pose.location.y = 25
+            start_pose.location.y = 10
             start_pose.rotation.yaw = -90
             obstacle1 = world.spawn_actor(
                 random.choice(blueprint_library.filter('walker.*')),
                 start_pose)
-            control = carla.WalkerControl(direction=carla.Vector3D(1.1, 0, 0), speed=2.2, jump=False)
+            control = carla.WalkerControl(direction=carla.Vector3D(1.1, 0, 0), speed=2, jump=False)
             obstacle1.apply_control(control)
             # obstacle1.set_target_velocity(carla.Vector3D(-0.5, 0, 0))
             actor_list.append(obstacle1)
@@ -621,7 +622,7 @@ def main():
             trajectory = straight1
 
         """Creating Obstacle Map object"""
-        obstacle_map = ObstacleMap(ego=ego, world=world, trajectory=trajectory, lanes=None, range=map_range)
+        obstacle_map = ObstacleMap(ego=ego, world=world, trajectory=trajectory, lanes=lanes, range=map_range)
 
         # obstacle_initial_ellipse2d = Ellipse2D(obstacle.bounding_box.extent.x,
         #                                obstacle.bounding_box.extent.y,
@@ -909,10 +910,10 @@ def main():
                     s = np.array(
                         [ego_location.x, ego_location.y, ego_rotation.yaw * DEGREE_TO_RADIANS, ego_velocity.length()])
 
-                    # lane1 = PolyLane(lane_obstacles_coeff['lane1'], s = s)
-                    # lane2 = PolyLane(lane_obstacles_coeff['lane2'], s = s)
-                    # cbf_controller.obstacle_list2d['lane1'] = lane1
-                    # cbf_controller.obstacle_list2d['lane2'] = lane2
+                    lane1 = PolyLane(lane_obstacles_coeff['lane1'], s = s)
+                    lane2 = PolyLane(lane_obstacles_coeff['lane2'], s = s)
+                    cbf_controller.obstacle_list2d['lane1'] = lane1
+                    cbf_controller.obstacle_list2d['lane2'] = lane2
 
                     for actor_id in obstacles_list:
                         obstacle_location = obstacles_list[actor_id].get_transform().location

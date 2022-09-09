@@ -16,9 +16,11 @@ import glob
 import os
 import sys
 import time
+import random
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+import matplotlib.colors as mcolors
 import cv2
 import numpy as np
 
@@ -51,7 +53,7 @@ except:
 
 class ObstacleMap:
 
-    def __init__(self, ego, world, trajectory, display=True, range=30, collision_cone=True):
+    def __init__(self, ego, world, trajectory, lanes, display=True, range=30, collision_cone=True):
         """
         Initializing the ObstacleMap class with current ego vehicle, and world parameters
         :param ego: Vehicle object corresponding to the ego vehicle
@@ -61,6 +63,7 @@ class ObstacleMap:
         """
 
         self.obstacles_list = None
+        self.lanes = lanes
         self.ego = None
         self.ego_width = None
         self.ego_height = None
@@ -92,7 +95,8 @@ class ObstacleMap:
         self.ax.spines['bottom'].set_position('center')
         self.ax.spines['right'].set_color('none')
         self.ax.spines['top'].set_color('none')
-        self.ax.invert_yaxis()
+        # self.ax.invert_yaxis()
+        self.ax.invert_xaxis()
         self.ax.set_xlabel("← West -- East → (metres)", fontsize=10)
         self.ax.set_ylabel("← South -- North → (metres)", fontsize=10)
         self.ax.xaxis.set_label_coords(0.2, 0)
@@ -101,6 +105,8 @@ class ObstacleMap:
     def plot_actors(self, *actors_list, buffer=1):
         """buffer: Buffer (in metres) given to the bounding boxes to form viable ellipses for the CBF"""
         self.obstacles_list = {}
+        names = list(mcolors.BASE_COLORS)
+        i=0
         for actors in actors_list:
             for actor in actors:
                 if actor.id == self.ego.id and self.cbf_active and self.display:
@@ -136,6 +142,7 @@ class ObstacleMap:
 
                 else:
                     d_from_ego = actor.get_transform().location.distance(self.ego.get_transform().location)
+                    random_color = names[i]
                     if d_from_ego < self.range:
                         actor_location = actor.get_transform().location
                         actor_rotation = actor.get_transform().rotation
@@ -154,10 +161,10 @@ class ObstacleMap:
                             actor_yaw = actor_rotation.yaw
                             actor_height = 2 * actor.bounding_box.extent.y
                             actor_width = 2 * actor.bounding_box.extent.x
-                            # unit_actor_velocity_x = actor_velocity.make_unit_vector().x
-                            # unit_actor_velocity_y = actor_velocity.make_unit_vector().y
-                            # scaling_constant = 5
-                            # plt.arrow(actor_x, actor_y, unit_actor_velocity_x * scaling_constant, unit_actor_velocity_y * scaling_constant, width=0.05)
+                            unit_relative_velocity_x = (actor_velocity - self.ego_v).make_unit_vector().x
+                            unit_relative_velocity_y = (actor_velocity - self.ego_v).make_unit_vector().y
+                            scaling_constant = 5
+                            plt.arrow(0, 0, unit_relative_velocity_x * scaling_constant, unit_relative_velocity_y * scaling_constant, width=0.3, ec = random_color, fc = random_color)
 
                             if self.collision_cone:
                                 (Px, Py) = (0, 0)
@@ -175,10 +182,12 @@ class ObstacleMap:
                                 T2x = Cx + a * math.cos(d2)
                                 T2y = Cy + a * math.sin(d2)
 
-                                plt.plot((Px, T1x), (Py, T1y), color='red')
-                                plt.plot((Px, T2x), (Py, T2y), color='red')
+                                plt.plot((Px, T1x), (Py, T1y), color=random_color)
+                                plt.plot((Px, T2x), (Py, T2y), color=random_color)
+                                plt.plot((Px, -T1x), (Py, -T1y), color=random_color)
+                                plt.plot((Px, -T2x), (Py, -T2y), color=random_color)
 
-                                self.ax.add_artist(plt.Circle((Cx, Cy), a))
+                                self.ax.add_artist(plt.Circle((Cx, Cy), a, color=random_color))
 
                             else:
                                 self.ax.add_patch(patches.Ellipse(xy=(actor_x, actor_y),
@@ -188,11 +197,19 @@ class ObstacleMap:
                                                       angle=actor_yaw,
                                                       fill=True,
                                                       fc='red'))
+                    i = i + 1
 
     def plot_trajectory(self):
         rel_traj_x = self.trajectory[:,0] - self.ego_x
         rel_traj_y = self.trajectory[:,1] - self.ego_y
         self.ax.plot(rel_traj_x, rel_traj_y)
+
+    def plot_lanes(self):
+        if self.lanes is not None:
+            for lane in self.lanes:
+                rel_traj_x = lane[:,0] - self.ego_x
+                rel_traj_y = lane[:,1] - self.ego_y
+                self.ax.plot(rel_traj_x, rel_traj_y)
 
     def refresh(self, ego, world):
         """
@@ -220,6 +237,7 @@ class ObstacleMap:
         im = None
         if self.display:
             self.plot_trajectory()
+            self.plot_lanes()
             self.fig.canvas.draw()
             data = np.frombuffer(self.fig.canvas.tostring_rgb(), dtype=np.uint8)
             w, h = self.fig.canvas.get_width_height()
